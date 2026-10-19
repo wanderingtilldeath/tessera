@@ -13,9 +13,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/frontier"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/metrics"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/store"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/metrics"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
 )
 
 type fixture struct {

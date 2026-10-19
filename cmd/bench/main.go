@@ -31,9 +31,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/db"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/fakesite"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/frontier"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/db"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fakesite"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
 )
 
 type options struct {

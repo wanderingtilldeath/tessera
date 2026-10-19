@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/fakesite"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/fetch"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/frontier"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/politeness"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/robots"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/store"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/testutil"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fakesite"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fetch"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/politeness"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/robots"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/testutil"
 )
 
 // TestIntegration_ChaosSiteOnRealPostgresAndRedis crawls the fake site's

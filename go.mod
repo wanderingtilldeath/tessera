@@ -1,4 +1,4 @@
-module github.com/wanderingtilldeath/go-concurrent-crawler
+module github.com/wanderingtilldeath/docs-rag-ingest
 
 go 1.26.0
 

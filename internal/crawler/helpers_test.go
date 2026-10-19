@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/fetch"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/frontier"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/store"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fetch"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
 )
 
 // harness bundles a crawler with the in-memory backends it runs on.

@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/urlnorm"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/urlnorm"
 )
 
 const (

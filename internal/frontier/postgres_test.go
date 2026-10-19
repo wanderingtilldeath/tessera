@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/frontier"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/testutil"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/testutil"
 )
 
 // TestPostgresTwoProcessesShareOneQueue models two crawler processes (two
