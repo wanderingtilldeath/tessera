@@ -199,11 +199,11 @@ func pdfSections(data []byte) (sections []Section, err error) {
 	}
 
 	for i := 1; i <= r.NumPage(); i++ {
-		text, perr := r.Page(i).GetPlainText(nil)
+		text, perr := pageText(r.Page(i))
 		if perr != nil {
 			return nil, fmt.Errorf("read pdf page %d: %w", i, perr)
 		}
-		if text = strings.Join(strings.Fields(text), " "); text != "" {
+		if text = tidy(text); text != "" {
 			sections = append(sections, Section{Heading: fmt.Sprintf("Page %d", i), Text: text})
 		}
 	}

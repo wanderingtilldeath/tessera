@@ -73,11 +73,13 @@ func build(batchID int64, name string, data []byte) (store.ChunkSet, error) {
 	url := fmt.Sprintf("upload://%d/%s", batchID, name)
 
 	return store.ChunkSet{
-		URLHash:     frontier.Hash(url),
-		BatchID:     batchID,
-		URL:         url,
-		Title:       title,
-		ContentHash: store.ContentHash(data),
+		URLHash: frontier.Hash(url),
+		BatchID: batchID,
+		URL:     url,
+		Title:   title,
+		// The extractor's version is hashed in so that re-uploading a file after extraction improves
+		// replaces its stored text instead of being treated as unchanged.
+		ContentHash: store.ContentHash(append([]byte("extract-v"+extractVersion+"\x00"), data...)),
 		Chunks:      chunks,
 	}, nil
 }
