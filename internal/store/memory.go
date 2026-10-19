@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -14,11 +16,17 @@ type Memory struct {
 	pages  map[string]Page
 	chunks map[string]ChunkSet
 	saves  int
+	// embeddings is keyed by "<url hash>#<seq>"; members by url hash.
+	embeddings map[string][]float32
+	members    map[string]map[int64]bool
 }
 
 // NewMemory returns an empty in-memory store.
 func NewMemory() *Memory {
-	return &Memory{pages: make(map[string]Page), chunks: make(map[string]ChunkSet)}
+	return &Memory{
+		pages: make(map[string]Page), chunks: make(map[string]ChunkSet),
+		embeddings: make(map[string][]float32), members: make(map[string]map[int64]bool),
+	}
 }
 
 func (m *Memory) Save(_ context.Context, p Page) error {
@@ -35,14 +43,185 @@ func (m *Memory) SaveChunks(_ context.Context, set ChunkSet) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if set.BatchID != 0 {
+		if m.members[set.URLHash] == nil {
+			m.members[set.URLHash] = map[int64]bool{}
+		}
+		m.members[set.URLHash][set.BatchID] = true
+	}
+
 	if old, ok := m.chunks[set.URLHash]; ok && old.ContentHash == set.ContentHash {
-		old.CrawlID = set.CrawlID
+		if set.CrawlID != 0 {
+			old.CrawlID = set.CrawlID
+		}
 		m.chunks[set.URLHash] = old
 		return nil
+	}
+	if old, ok := m.chunks[set.URLHash]; ok {
+		for _, c := range old.Chunks {
+			delete(m.embeddings, embKey(set.URLHash, c.Seq))
+		}
 	}
 	m.chunks[set.URLHash] = set
 
 	return nil
+}
+
+func embKey(hash string, seq int) string { return fmt.Sprintf("%s#%d", hash, seq) }
+
+func (m *Memory) inScope(hash string, batchID int64) bool {
+	return batchID == 0 || m.members[hash][batchID]
+}
+
+func (m *Memory) EmbedPending(ctx context.Context, limit int, embed func(ctx context.Context, texts []string) ([][]float32, error)) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	hashes := make([]string, 0, len(m.chunks))
+	for h := range m.chunks {
+		hashes = append(hashes, h)
+	}
+	sort.Strings(hashes)
+
+	var (
+		keys  []string
+		texts []string
+	)
+	for _, h := range hashes {
+		set := m.chunks[h]
+		for _, c := range set.Chunks {
+			k := embKey(h, c.Seq)
+			if _, done := m.embeddings[k]; !done && len(keys) < limit {
+				keys = append(keys, k)
+				texts = append(texts, EmbedText(set.Title, c.Heading, c.Text))
+			}
+		}
+	}
+	if len(keys) == 0 {
+		return 0, nil
+	}
+
+	vecs, err := embed(ctx, texts)
+	if err != nil {
+		return 0, err
+	}
+	if len(vecs) != len(keys) {
+		return 0, fmt.Errorf("store: embedder returned %d vectors for %d chunks", len(vecs), len(keys))
+	}
+	for i, k := range keys {
+		m.embeddings[k] = vecs[i]
+	}
+
+	return len(keys), nil
+}
+
+func (m *Memory) SearchChunks(_ context.Context, query []float32, scope Scope, limit, offset int) ([]PassageHit, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var hits []PassageHit
+	for h, set := range m.chunks {
+		if !m.inScope(h, scope.BatchID) || !urlInScope(set.URL, scope.URLs) {
+			continue
+		}
+		for _, c := range set.Chunks {
+			if vec, ok := m.embeddings[embKey(h, c.Seq)]; ok {
+				hits = append(hits, PassageHit{URL: set.URL, Title: set.Title, Heading: c.Heading, Text: c.Text, Score: cosine(query, vec), seq: c.Seq})
+			}
+		}
+	}
+
+	sort.Slice(hits, func(i, j int) bool {
+		if hits[i].Score != hits[j].Score {
+			return hits[i].Score > hits[j].Score
+		}
+		if hits[i].URL != hits[j].URL {
+			return hits[i].URL < hits[j].URL
+		}
+		return hits[i].seq < hits[j].seq
+	})
+	offset = max(0, min(offset, len(hits)))
+	hits = hits[offset:]
+	if limit > 0 && len(hits) > limit {
+		hits = hits[:limit]
+	}
+
+	return hits, nil
+}
+
+func urlInScope(url string, urls []string) bool {
+	if len(urls) == 0 {
+		return true
+	}
+	for _, u := range urls {
+		if u == url {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Memory) BatchDocuments(_ context.Context, batchID int64, limit int) ([]DocInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	docs := []DocInfo{}
+	for h, set := range m.chunks {
+		if !m.inScope(h, batchID) || len(set.Chunks) == 0 {
+			continue
+		}
+		d := DocInfo{URL: set.URL, Title: set.Title, Chunks: int64(len(set.Chunks))}
+		for _, c := range set.Chunks {
+			if _, ok := m.embeddings[embKey(h, c.Seq)]; ok {
+				d.Embedded++
+			}
+		}
+		docs = append(docs, d)
+	}
+
+	sort.Slice(docs, func(i, j int) bool { return docs[i].URL < docs[j].URL })
+	if limit > 0 && len(docs) > limit {
+		docs = docs[:limit]
+	}
+
+	return docs, nil
+}
+
+func (m *Memory) EmbeddingStats(_ context.Context, batchID int64) (EmbedStats, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var st EmbedStats
+	for h, set := range m.chunks {
+		if !m.inScope(h, batchID) {
+			continue
+		}
+		for _, c := range set.Chunks {
+			st.Total++
+			if _, ok := m.embeddings[embKey(h, c.Seq)]; ok {
+				st.Embedded++
+			}
+		}
+	}
+
+	return st, nil
+}
+
+func cosine(a, b []float32) float64 {
+	var dot, na, nb float64
+	for i := range a {
+		if i >= len(b) {
+			break
+		}
+		dot += float64(a[i]) * float64(b[i])
+		na += float64(a[i]) * float64(a[i])
+		nb += float64(b[i]) * float64(b[i])
+	}
+	if na == 0 || nb == 0 {
+		return 0
+	}
+
+	return dot / (math.Sqrt(na) * math.Sqrt(nb))
 }
 
 func (m *Memory) ExportChunks(_ context.Context, crawlID int64, fn func(ChunkRow) error) error {

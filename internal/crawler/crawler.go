@@ -453,7 +453,7 @@ func (c *Crawler) handlePage(ctx context.Context, crawl frontier.Crawl, it front
 		}
 
 		chunks := store.ChunkSet{
-			URLHash: it.URLHash, CrawlID: it.CrawlID, URL: it.URL, Title: page.Title,
+			URLHash: it.URLHash, CrawlID: it.CrawlID, BatchID: crawl.BatchID, URL: it.URL, Title: page.Title,
 			ContentHash: store.ContentHash(res.Body), Chunks: chunk.Split(page.Sections, chunk.DefaultMaxChars),
 		}
 		if err := c.deps.Store.SaveChunks(ctx, chunks); err != nil {

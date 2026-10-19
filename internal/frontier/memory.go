@@ -86,6 +86,35 @@ func (m *Memory) ListCrawls(_ context.Context, limit int) ([]Crawl, error) {
 	return out, nil
 }
 
+func (m *Memory) SetCrawlBatch(_ context.Context, crawlID, batchID int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	crawl, ok := m.crawls[crawlID]
+	if !ok {
+		return ErrNotFound
+	}
+	crawl.BatchID = batchID
+	m.crawls[crawlID] = crawl
+
+	return nil
+}
+
+func (m *Memory) BatchCrawls(_ context.Context, batchID int64) ([]Crawl, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := []Crawl{}
+	for _, c := range m.crawls {
+		if c.BatchID == batchID {
+			out = append(out, c)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+
+	return out, nil
+}
+
 func (m *Memory) DepthStats(_ context.Context, crawlID int64) ([]DepthRow, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

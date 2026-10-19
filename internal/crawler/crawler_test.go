@@ -665,3 +665,42 @@ func TestCrawler_ScopesByPathPrefixAndChunksPages(t *testing.T) {
 		t.Errorf("nav text leaked into chunk: %q", rows[0].Text)
 	}
 }
+
+func TestCrawler_PagesOfABatchCrawlJoinTheBatch(t *testing.T) {
+	ts, _ := site(t, map[string]string{
+		"/":  `<main><h1>Home</h1><p>Welcome to the docs.</p><a href="/a">a</a></main>`,
+		"/a": `<main><h1>A</h1><p>Page A text.</p></main>`,
+	})
+
+	h := newHarness(t, testConfig(), nil)
+	ctx := context.Background()
+
+	crawl, err := frontier.StartCrawlInBatch(ctx, h.frontier, 7, ts.URL+"/", 1, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 0, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = other
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go h.c.Run(runCtx)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if stats, _ := h.frontier.Stats(ctx, crawl.ID); stats[frontier.Done] == 2 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	if st, _ := h.store.EmbeddingStats(ctx, 7); st.Total != 2 {
+		t.Fatalf("batch 7 has %d chunks, want 2 (one per crawled page)", st.Total)
+	}
+	if st, _ := h.store.EmbeddingStats(ctx, 8); st.Total != 0 {
+		t.Fatalf("another batch must not see them: %+v", st)
+	}
+}

@@ -36,6 +36,11 @@ type Config struct {
 	UserAgent     string
 	Conditional   bool
 
+	// EmbedURL is an Ollama server used to embed chunks for semantic search;
+	// empty turns embedding and semantic search off.
+	EmbedURL   string
+	EmbedModel string
+
 	LogLevel  string
 	LogFormat string
 
@@ -77,6 +82,9 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	fs.DurationVar(&cfg.ShutdownGrace, "shutdown-grace", env.duration("SHUTDOWN_GRACE", 15*time.Second), "time allowed for in-flight work on shutdown (env SHUTDOWN_GRACE)")
 	fs.StringVar(&cfg.UserAgent, "user-agent", env.str("USER_AGENT", fetch.DefaultUserAgent), "User-Agent header; include a contact URL (env USER_AGENT)")
 	fs.BoolVar(&cfg.Conditional, "conditional", env.bool("CONDITIONAL", false), "send If-None-Match/If-Modified-Since for re-fetches; links on 304 pages are not rediscovered (env CONDITIONAL)")
+
+	fs.StringVar(&cfg.EmbedURL, "embed-url", env.str("EMBED_URL", ""), "Ollama base URL, e.g. http://ollama:11434, for semantic search embeddings; empty disables embedding (env EMBED_URL)")
+	fs.StringVar(&cfg.EmbedModel, "embed-model", env.str("EMBED_MODEL", "nomic-embed-text"), "Ollama embedding model; must produce 768-dimension vectors (env EMBED_MODEL)")
 
 	fs.StringVar(&cfg.LogLevel, "log-level", env.str("LOG_LEVEL", "info"), "debug, info, warn or error (env LOG_LEVEL)")
 	fs.StringVar(&cfg.LogFormat, "log-format", env.str("LOG_FORMAT", "text"), "text or json (env LOG_FORMAT)")

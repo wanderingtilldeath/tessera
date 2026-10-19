@@ -24,9 +24,11 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/api"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/batch"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/config"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/crawler"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/db"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/embed"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fetch"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/metrics"
@@ -70,6 +72,22 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 
 	front := frontier.NewPostgres(pool)
 	pages := store.NewPostgres(pool)
+	batches := batch.NewPostgres(pool)
+
+	// Embedding runs in the background so crawling never waits on it. Every
+	// process runs the loop; they claim different chunks.
+	var embedder embed.Embedder
+	embedDone := make(chan struct{})
+	if cfg.EmbedURL != "" {
+		embedder = embed.NewOllama(cfg.EmbedURL, cfg.EmbedModel)
+		go func() {
+			defer close(embedDone)
+			embed.Run(ctx, pages, embedder, logger)
+		}()
+	} else {
+		close(embedDone)
+		logger.Warn("no -embed-url: chunks are stored but not embedded, and semantic search is off")
+	}
 
 	checks := map[string]func(context.Context) error{"postgres": pool.Ping}
 
@@ -136,6 +154,8 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 		servers = append(servers, serve(logger, "api", cfg.ListenAddr, api.NewHandler(api.Deps{
 			Frontier: front,
 			Store:    pages,
+			Batches:  batches,
+			Embedder: embedder,
 			Metrics:  promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
 			Checks:   checks,
 			Logger:   logger,
@@ -168,6 +188,9 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 	// Shutdown order: workers are drained (their leases finished or
 	// released), then pending page writes are flushed, then the servers stop.
 	logger.Info("shutting down")
+
+	stop()
+	<-embedDone
 
 	if err := pages.Close(); err != nil {
 		logger.Warn("closing store", "error", err)

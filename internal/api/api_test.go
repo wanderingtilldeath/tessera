@@ -14,23 +14,26 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/batch"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/chunk"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/metrics"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/testutil"
 )
 
 type fixture struct {
 	srv      *httptest.Server
 	frontier *frontier.Memory
 	store    *store.Memory
+	batches  *batch.Memory
 	healthy  bool
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
-	f := &fixture{frontier: frontier.NewMemory(nil), store: store.NewMemory(), healthy: true}
+	f := &fixture{frontier: frontier.NewMemory(nil), store: store.NewMemory(), batches: batch.NewMemory(), healthy: true}
 
 	reg := prometheus.NewRegistry()
 	m := metrics.New(reg)
@@ -39,6 +42,8 @@ func newFixture(t *testing.T) *fixture {
 	f.srv = httptest.NewServer(NewHandler(Deps{
 		Frontier: f.frontier,
 		Store:    f.store,
+		Batches:  f.batches,
+		Embedder: testutil.FakeEmbedder{},
 		Metrics:  promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
 		Checks: map[string]func(context.Context) error{
 			"db": func(context.Context) error {

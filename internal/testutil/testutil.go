@@ -52,7 +52,8 @@ func PostgresWithURL(t *testing.T) (*pgxpool.Pool, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+	// public stays on the path: the pgvector extension is installed there.
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
@@ -74,7 +75,7 @@ func PostgresWithURL(t *testing.T) (*pgxpool.Pool, string) {
 		sep = "&"
 	}
 
-	return pool, url + sep + "search_path=" + schema
+	return pool, url + sep + "search_path=" + schema + ",public"
 }
 
 // Redis returns a client on the test Redis. Every "crawlerx:*" key is removed

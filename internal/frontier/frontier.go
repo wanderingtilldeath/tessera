@@ -50,8 +50,10 @@ type Crawl struct {
 	MaxDepth     int      `json:"max_depth"`
 	AllowedHosts []string `json:"allowed_hosts"`
 	// PathPrefixes limits links to these URL path prefixes; empty means any path.
-	PathPrefixes []string  `json:"path_prefixes"`
-	CreatedAt    time.Time `json:"created_at"`
+	PathPrefixes []string `json:"path_prefixes"`
+	// BatchID is the batch this crawl belongs to; 0 means none.
+	BatchID   int64     `json:"batch_id,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // AllowsHost reports whether the crawl may fetch from host (host[:port]).
@@ -146,6 +148,10 @@ type Frontier interface {
 	GetCrawl(ctx context.Context, id int64) (Crawl, error)
 	// ListCrawls returns the most recent crawls, newest first.
 	ListCrawls(ctx context.Context, limit int) ([]Crawl, error)
+	// SetCrawlBatch attaches a crawl to a batch.
+	SetCrawlBatch(ctx context.Context, crawlID, batchID int64) error
+	// BatchCrawls returns a batch's crawls, oldest first.
+	BatchCrawls(ctx context.Context, batchID int64) ([]Crawl, error)
 
 	// Enqueue adds URLs to a crawl, ignoring ones already present, and
 	// returns how many were new. A URL that is still pending and is enqueued
@@ -222,6 +228,27 @@ func StartCrawl(ctx context.Context, f Frontier, seed string, maxDepth int, allo
 	if err != nil {
 		return Crawl{}, err
 	}
+
+	if _, err := f.Enqueue(ctx, crawl.ID, []NewItem{{URL: seed, Depth: 0}}); err != nil {
+		return Crawl{}, err
+	}
+
+	return crawl, nil
+}
+
+// StartCrawlInBatch is StartCrawl for a crawl that belongs to a batch. The
+// batch is set before the seed is enqueued, so no page of the crawl is ever
+// processed without it.
+func StartCrawlInBatch(ctx context.Context, f Frontier, batchID int64, seed string, maxDepth int, allowedHosts, pathPrefixes []string) (Crawl, error) {
+	crawl, err := f.CreateCrawl(ctx, seed, maxDepth, allowedHosts, pathPrefixes)
+	if err != nil {
+		return Crawl{}, err
+	}
+
+	if err := f.SetCrawlBatch(ctx, crawl.ID, batchID); err != nil {
+		return Crawl{}, err
+	}
+	crawl.BatchID = batchID
 
 	if _, err := f.Enqueue(ctx, crawl.ID, []NewItem{{URL: seed, Depth: 0}}); err != nil {
 		return Crawl{}, err

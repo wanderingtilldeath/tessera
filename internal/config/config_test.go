@@ -79,3 +79,18 @@ func TestLoadRejectsBadInput(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadEmbedding(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x"}
+
+	cfg, err := Load(nil, env(base), io.Discard)
+	if err != nil || cfg.EmbedURL != "" || cfg.EmbedModel != "nomic-embed-text" {
+		t.Fatalf("embedding must be off unless configured: %+v, %v", cfg, err)
+	}
+
+	base["EMBED_URL"], base["EMBED_MODEL"] = "http://ollama:11434", "other-model"
+	cfg, err = Load([]string{"-embed-model", "flag-model"}, env(base), io.Discard)
+	if err != nil || cfg.EmbedURL != "http://ollama:11434" || cfg.EmbedModel != "flag-model" {
+		t.Fatalf("env gives the URL, the flag wins for the model: %+v, %v", cfg, err)
+	}
+}

@@ -26,7 +26,12 @@ func backends() []backend {
 		}},
 		{"postgres", func(t *testing.T) (frontier.Frontier, func(time.Duration)) {
 			// Postgres uses the database clock, so tests use real, short sleeps.
-			return frontier.NewPostgres(testutil.Postgres(t)), func(d time.Duration) { time.Sleep(d) }
+			pool := testutil.Postgres(t)
+			// crawls.batch_id references batches; tests may use batch ids 1 to 3.
+			if _, err := pool.Exec(context.Background(), `INSERT INTO batches (name) SELECT 'b' FROM generate_series(1, 3)`); err != nil {
+				t.Fatal(err)
+			}
+			return frontier.NewPostgres(pool), func(d time.Duration) { time.Sleep(d) }
 		}},
 	}
 }
@@ -436,6 +441,54 @@ func TestDepthStatsGroupsByDepthAndStatus(t *testing.T) {
 		}
 		if got[1].Depth != 1 || got[1].Stats["failed"] != 1 || got[1].Stats["pending"] != 2 {
 			t.Errorf("depth 1 = %+v", got[1])
+		}
+	})
+}
+
+func TestBatchCrawls(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, f frontier.Frontier, _ func(time.Duration)) {
+		ctx := context.Background()
+
+		inBatch1, err := frontier.StartCrawlInBatch(ctx, f, 1, "http://a.test/one", 0, nil, nil)
+		if err != nil || inBatch1.BatchID != 1 {
+			t.Fatalf("StartCrawlInBatch = %+v, %v", inBatch1, err)
+		}
+		if _, err := frontier.StartCrawlInBatch(ctx, f, 2, "http://b.test/", 0, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := frontier.StartCrawlInBatch(ctx, f, 1, "http://a.test/two", 0, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		plain := newCrawl(t, f)
+		if plain.BatchID != 0 {
+			t.Fatalf("a crawl outside any batch has BatchID %d", plain.BatchID)
+		}
+
+		got, err := f.BatchCrawls(ctx, 1)
+		if err != nil || len(got) != 2 || got[0].Seed != "http://a.test/one" || got[1].Seed != "http://a.test/two" {
+			t.Fatalf("BatchCrawls(1) = %+v, %v", got, err)
+		}
+		if got, _ := f.BatchCrawls(ctx, 3); len(got) != 0 {
+			t.Fatalf("empty batch has crawls: %+v", got)
+		}
+
+		// The batch is stored with the crawl, and its seed was queued.
+		reread, err := f.GetCrawl(ctx, inBatch1.ID)
+		if err != nil || reread.BatchID != 1 {
+			t.Fatalf("GetCrawl = %+v, %v", reread, err)
+		}
+		if stats, _ := f.Stats(ctx, inBatch1.ID); stats[frontier.Pending] != 1 {
+			t.Fatalf("seed not enqueued: %v", stats)
+		}
+		list, _ := f.ListCrawls(ctx, 10)
+		for _, c := range list {
+			if (c.ID == plain.ID) != (c.BatchID == 0) {
+				t.Errorf("ListCrawls mixed up batch ids: %+v", c)
+			}
+		}
+
+		if err := f.SetCrawlBatch(ctx, 9999, 1); err != frontier.ErrNotFound {
+			t.Errorf("SetCrawlBatch on a missing crawl = %v, want ErrNotFound", err)
 		}
 	})
 }
