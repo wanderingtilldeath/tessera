@@ -3,10 +3,12 @@ package store_test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/chunk"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/testutil"
@@ -157,5 +159,49 @@ func TestContentHashIsStable(t *testing.T) {
 	first, again := store.ContentHash([]byte("a")), store.ContentHash([]byte("a"))
 	if first != again || first == store.ContentHash([]byte("b")) {
 		t.Fatal("ContentHash must be deterministic and distinguish inputs")
+	}
+}
+
+func TestPostgresChunks(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	set := func(crawl int64, hash string, texts ...string) store.ChunkSet {
+		cs := store.ChunkSet{URLHash: "u1", CrawlID: crawl, URL: "http://a.test/", Title: "A", ContentHash: hash}
+		for i, text := range texts {
+			cs.Chunks = append(cs.Chunks, chunk.Chunk{Seq: i, Heading: "H", Text: text})
+		}
+		return cs
+	}
+	export := func(crawl int64) (texts []string) {
+		err := s.ExportChunks(ctx, crawl, func(r store.ChunkRow) error { texts = append(texts, r.Text); return nil })
+		if err != nil {
+			t.Fatal(err)
+		}
+		return texts
+	}
+
+	if err := s.SaveChunks(ctx, set(1, "c1", "one", "two")); err != nil {
+		t.Fatal(err)
+	}
+	if got := export(1); !reflect.DeepEqual(got, []string{"one", "two"}) {
+		t.Fatalf("export = %v", got)
+	}
+
+	// Same content hash in a later crawl: chunks are kept and re-attached.
+	if err := s.SaveChunks(ctx, set(2, "c1", "ignored")); err != nil {
+		t.Fatal(err)
+	}
+	if got := export(2); !reflect.DeepEqual(got, []string{"one", "two"}) {
+		t.Fatalf("unchanged page export = %v, want the original chunks", got)
+	}
+
+	// New content replaces the whole set.
+	if err := s.SaveChunks(ctx, set(2, "c2", "three")); err != nil {
+		t.Fatal(err)
+	}
+	if got := export(2); !reflect.DeepEqual(got, []string{"three"}) {
+		t.Fatalf("changed page export = %v", got)
 	}
 }

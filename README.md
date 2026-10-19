@@ -46,3 +46,14 @@ make test                                 # all tests, -race, needs TEST_DATABAS
 ```
 
 The suite includes the original deadlock regression (`internal/crawler/deadlock_test.go`) and end-to-end `kill -9` / SIGTERM / two-process tests (`internal/e2e`). Benchmark: `make bench`, results and caveats in [docs/BENCHMARK.md](docs/BENCHMARK.md). Concept notes: [docs/CONCEPTS.md](docs/CONCEPTS.md).
+
+## Docs-to-RAG export
+
+Crawl a docs site, then pull clean, heading-aware text chunks for embedding:
+
+```
+curl -XPOST localhost:8081/crawls -d '{"seed":"https://docs.example.com/docs/","max_depth":5,"path_prefixes":["/docs/"]}'
+curl localhost:8081/crawls/1/export > chunks.jsonl   # one JSON chunk per line
+```
+
+Each line: `{id, url, title, heading, text, content_hash}`. Text comes from `<main>` (else `<article>`, else `<body>`), without nav/header/footer/aside/forms, split at h1-h3 into chunks of at most 1500 characters. Re-crawling an unchanged page keeps its chunks. `path_prefixes` also exists as `-path-prefixes` / `PATH_PREFIXES` for the `-seed` crawl.

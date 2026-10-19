@@ -9,6 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/chunk"
 )
 
 const (
@@ -142,6 +144,76 @@ func (s *Postgres) flush(batch []saveRequest) {
 		}
 		req.done <- err
 	}
+}
+
+func chunkRow(set ChunkSet, c chunk.Chunk) ChunkRow {
+	return ChunkRow{
+		ID: fmt.Sprintf("%s-%d", set.URLHash, c.Seq), URL: set.URL, Title: set.Title,
+		Heading: c.Heading, Text: c.Text, ContentHash: set.ContentHash,
+	}
+}
+
+func (s *Postgres) SaveChunks(ctx context.Context, set ChunkSet) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("store: save chunks %s: %w", set.URL, err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after commit
+
+	var stored string
+	err = tx.QueryRow(ctx, `SELECT content_hash FROM chunks WHERE url_hash = $1 LIMIT 1`, set.URLHash).Scan(&stored)
+	switch {
+	case err == nil && stored == set.ContentHash:
+		if _, err := tx.Exec(ctx, `UPDATE chunks SET crawl_id = $2 WHERE url_hash = $1 AND crawl_id <> $2`,
+			set.URLHash, set.CrawlID); err != nil {
+			return fmt.Errorf("store: save chunks %s: %w", set.URL, err)
+		}
+		return tx.Commit(ctx)
+	case err != nil && !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("store: save chunks %s: %w", set.URL, err)
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM chunks WHERE url_hash = $1`, set.URLHash); err != nil {
+		return fmt.Errorf("store: save chunks %s: %w", set.URL, err)
+	}
+	batch := &pgx.Batch{}
+	for _, c := range set.Chunks {
+		batch.Queue(`INSERT INTO chunks (url_hash, seq, crawl_id, url, title, heading, text, content_hash)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			set.URLHash, c.Seq, set.CrawlID, set.URL, set.Title, c.Heading, c.Text, set.ContentHash)
+	}
+	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
+		return fmt.Errorf("store: save chunks %s: %w", set.URL, err)
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (s *Postgres) ExportChunks(ctx context.Context, crawlID int64, fn func(ChunkRow) error) error {
+	rows, err := s.pool.Query(ctx, `
+		SELECT url_hash, seq, url, title, heading, text, content_hash
+		FROM chunks WHERE crawl_id = $1 ORDER BY url, seq`, crawlID)
+	if err != nil {
+		return fmt.Errorf("store: export chunks: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			hash string
+			seq  int
+			r    ChunkRow
+		)
+		if err := rows.Scan(&hash, &seq, &r.URL, &r.Title, &r.Heading, &r.Text, &r.ContentHash); err != nil {
+			return fmt.Errorf("store: export chunks scan: %w", err)
+		}
+		r.ID = fmt.Sprintf("%s-%d", hash, seq)
+		if err := fn(r); err != nil {
+			return err
+		}
+	}
+
+	return rows.Err()
 }
 
 func (s *Postgres) Validators(ctx context.Context, urlHash string) (Validators, bool, error) {

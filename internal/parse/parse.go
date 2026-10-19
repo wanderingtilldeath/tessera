@@ -30,6 +30,8 @@ type Page struct {
 	// NoIndex and NoFollow come from <meta name="robots">.
 	NoIndex  bool
 	NoFollow bool
+	// Sections is the main content (no nav/header/footer) split at h1-h3.
+	Sections []Section
 }
 
 // Parser parses an HTML document. It is an interface so the crawler can be
@@ -59,6 +61,7 @@ func (HTMLParser) Parse(body io.Reader, pageURL string) (Page, error) {
 	page.Snippet = truncate(collapse(w.text.String()), maxSnippetRunes)
 	page.NoIndex = w.noindex
 	page.NoFollow = w.nofollow
+	page.Sections = extractSections(doc)
 
 	base := pageURL
 	if w.baseHref != "" {

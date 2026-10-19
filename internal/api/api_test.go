@@ -7,12 +7,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/wanderingtilldeath/docs-rag-ingest/internal/chunk"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/metrics"
 	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
@@ -223,5 +225,39 @@ func TestListCrawlsAndDepths(t *testing.T) {
 
 	if status, _, _ := f.do(t, "GET", "/crawls/99/depths", ""); status != http.StatusNotFound {
 		t.Errorf("unknown crawl depths: %d, want 404", status)
+	}
+}
+
+func TestExportChunks(t *testing.T) {
+	f := newFixture(t)
+	crawl, err := frontier.StartCrawl(context.Background(), f.frontier, "http://a.test/", 1, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = f.store.SaveChunks(context.Background(), store.ChunkSet{
+		URLHash: "h1", CrawlID: crawl.ID, URL: "http://a.test/", Title: "A", ContentHash: "c1",
+		Chunks: []chunk.Chunk{{Seq: 0, Heading: "Intro", Text: "hello"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := http.Get(f.srv.URL + "/crawls/" + strconv.FormatInt(crawl.ID, 10) + "/export")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if ct := resp.Header.Get("Content-Type"); ct != "application/x-ndjson" {
+		t.Errorf("Content-Type = %q", ct)
+	}
+	want := `{"id":"h1-0","url":"http://a.test/","title":"A","heading":"Intro","text":"hello","content_hash":"c1"}` + "\n"
+	if string(body) != want {
+		t.Errorf("body = %q, want %q", body, want)
+	}
+
+	if status, _, _ := f.do(t, "GET", "/crawls/999/export", ""); status != http.StatusNotFound {
+		t.Errorf("unknown crawl status = %d, want 404", status)
 	}
 }

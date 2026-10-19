@@ -53,6 +53,7 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("POST /crawls", s.createCrawl)
 	mux.HandleFunc("GET /crawls", s.listCrawls)
 	mux.HandleFunc("GET /crawls/{id}/depths", s.crawlDepths)
+	mux.HandleFunc("GET /crawls/{id}/export", s.exportChunks)
 	mux.HandleFunc("GET /crawls/{id}", s.getCrawl)
 	mux.HandleFunc("GET /search", s.search)
 	mux.HandleFunc("GET /healthz", s.healthz)
@@ -72,6 +73,7 @@ type createCrawlRequest struct {
 	Seed         string   `json:"seed"`
 	MaxDepth     *int     `json:"max_depth"`
 	AllowedHosts []string `json:"allowed_hosts"`
+	PathPrefixes []string `json:"path_prefixes"`
 }
 
 type crawlResponse struct {
@@ -108,7 +110,7 @@ func (s *server) createCrawl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	crawl, err := frontier.StartCrawl(r.Context(), s.Frontier, seed, maxDepth, req.AllowedHosts)
+	crawl, err := frontier.StartCrawl(r.Context(), s.Frontier, seed, maxDepth, req.AllowedHosts, req.PathPrefixes)
 	if err != nil {
 		s.Logger.Error("create crawl failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not create crawl")
@@ -138,6 +140,32 @@ func (s *server) getCrawl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeCrawl(w, r, http.StatusOK, crawl)
+}
+
+// exportChunks streams a crawl's text chunks as NDJSON, one chunk per line,
+// ready to embed for RAG.
+func (s *server) exportChunks(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, http.StatusBadRequest, "crawl id must be a positive integer")
+		return
+	}
+	if _, err := s.Frontier.GetCrawl(r.Context(), id); errors.Is(err, frontier.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "no such crawl")
+		return
+	} else if err != nil {
+		s.Logger.Error("export: get crawl failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not load crawl")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	enc := json.NewEncoder(w)
+	err = s.Store.ExportChunks(r.Context(), id, func(row store.ChunkRow) error { return enc.Encode(row) })
+	if err != nil {
+		// Headers are already sent; all we can do is log and cut the stream.
+		s.Logger.Error("export chunks failed", "crawl", id, "error", err)
+	}
 }
 
 func (s *server) crawlView(ctx context.Context, crawl frontier.Crawl) (crawlResponse, error) {

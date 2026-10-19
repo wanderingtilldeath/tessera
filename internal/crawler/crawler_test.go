@@ -475,7 +475,7 @@ func TestCrawler_ReclaimsWorkFromACrashedWorker(t *testing.T) {
 	h := newHarness(t, testConfig(), nil)
 	ctx := context.Background()
 
-	crawl, err := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 1, nil)
+	crawl, err := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 1, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -551,7 +551,7 @@ func TestCrawler_ContextCancellationStopsPromptlyAndReleasesWork(t *testing.T) {
 	h := newHarness(t, testConfig(), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	crawl, err := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 1, nil)
+	crawl, err := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 1, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -592,7 +592,7 @@ func TestCrawler_InFlightWorkFinishesDuringGracePeriod(t *testing.T) {
 
 	h := newHarness(t, cfg, nil)
 	ctx, cancel := context.WithCancel(context.Background())
-	crawl, _ := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 0, nil)
+	crawl, _ := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 0, nil, nil)
 
 	done := make(chan struct{})
 	go func() {
@@ -616,5 +616,52 @@ func TestCrawler_BadSeedIsRejected(t *testing.T) {
 
 	if _, err := h.c.Crawl(context.Background(), "ftp://example.com/", 1, nil); err == nil {
 		t.Fatal("expected an error for a non-http seed")
+	}
+}
+
+func TestCrawler_ScopesByPathPrefixAndChunksPages(t *testing.T) {
+	ts, counter := site(t, map[string]string{
+		"/docs/":  `<nav>menu</nav><main><h1>Docs</h1><p>Welcome.</p><a href="/docs/a">a</a><a href="/blog/x">x</a></main>`,
+		"/docs/a": `<main><h1>Page A</h1><p>Alpha text.</p></main>`,
+		"/blog/x": `<main><p>Not in scope.</p></main>`,
+	})
+
+	h := newHarness(t, testConfig(), nil)
+	ctx := context.Background()
+
+	crawl, err := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/docs/", 2, nil, []string{"docs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go h.c.Run(runCtx)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if stats, _ := h.frontier.Stats(ctx, crawl.ID); stats[frontier.Done] == 2 && stats.Active() == 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	if counter.count("/blog/x") != 0 {
+		t.Error("/blog/x is outside the /docs/ prefix but was fetched")
+	}
+
+	var rows []store.ChunkRow
+	err = h.store.ExportChunks(ctx, crawl.ID, func(r store.ChunkRow) error { rows = append(rows, r); return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("exported %d chunks, want 2: %#v", len(rows), rows)
+	}
+	if rows[1].Heading != "Page A" || rows[1].Text != "Alpha text." {
+		t.Errorf("chunk = %#v, want heading %q text %q", rows[1], "Page A", "Alpha text.")
+	}
+	if strings.Contains(rows[0].Text, "menu") {
+		t.Errorf("nav text leaked into chunk: %q", rows[0].Text)
 	}
 }

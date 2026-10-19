@@ -10,14 +10,15 @@ import (
 // Memory is an in-process Store for tests. Search is a naive substring
 // match, not real full-text search.
 type Memory struct {
-	mu    sync.Mutex
-	pages map[string]Page
-	saves int
+	mu     sync.Mutex
+	pages  map[string]Page
+	chunks map[string]ChunkSet
+	saves  int
 }
 
 // NewMemory returns an empty in-memory store.
 func NewMemory() *Memory {
-	return &Memory{pages: make(map[string]Page)}
+	return &Memory{pages: make(map[string]Page), chunks: make(map[string]ChunkSet)}
 }
 
 func (m *Memory) Save(_ context.Context, p Page) error {
@@ -26,6 +27,42 @@ func (m *Memory) Save(_ context.Context, p Page) error {
 
 	m.pages[p.URLHash] = p
 	m.saves++
+
+	return nil
+}
+
+func (m *Memory) SaveChunks(_ context.Context, set ChunkSet) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if old, ok := m.chunks[set.URLHash]; ok && old.ContentHash == set.ContentHash {
+		old.CrawlID = set.CrawlID
+		m.chunks[set.URLHash] = old
+		return nil
+	}
+	m.chunks[set.URLHash] = set
+
+	return nil
+}
+
+func (m *Memory) ExportChunks(_ context.Context, crawlID int64, fn func(ChunkRow) error) error {
+	m.mu.Lock()
+	var sets []ChunkSet
+	for _, set := range m.chunks {
+		if set.CrawlID == crawlID {
+			sets = append(sets, set)
+		}
+	}
+	m.mu.Unlock()
+
+	sort.Slice(sets, func(i, j int) bool { return sets[i].URL < sets[j].URL })
+	for _, set := range sets {
+		for _, c := range set.Chunks {
+			if err := fn(chunkRow(set, c)); err != nil {
+				return err
+			}
+		}
+	}
 
 	return nil
 }
