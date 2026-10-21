@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fakesite"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fetch"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/politeness"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/robots"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/testutil"
+	"github.com/wanderingtilldeath/tessera/internal/fakesite"
+	"github.com/wanderingtilldeath/tessera/internal/fetch"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/politeness"
+	"github.com/wanderingtilldeath/tessera/internal/robots"
+	"github.com/wanderingtilldeath/tessera/internal/store"
+	"github.com/wanderingtilldeath/tessera/internal/testutil"
 )
 
 // TestIntegration_ChaosSiteOnRealPostgresAndRedis crawls the fake site's
@@ -43,7 +43,7 @@ func TestIntegration_ChaosSiteOnRealPostgresAndRedis(t *testing.T) {
 		Fetcher:  fetch.New(fetch.Options{Timeout: 5 * time.Second, MaxBytes: 1 << 20}),
 		Store:    pages,
 		Gate:     politeness.NewRedis(rdb),
-		Robots:   robots.New(robots.Options{Product: "CrawlerX", Cache: robots.NewRedisCache(rdb)}),
+		Robots:   robots.New(robots.Options{Product: "Tessera", Cache: robots.NewRedisCache(rdb)}),
 		Logger:   discardLogger(),
 	})
 

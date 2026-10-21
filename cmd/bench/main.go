@@ -1,9 +1,9 @@
-// Command bench measures crawlerx throughput against the synthetic site with
+// Command bench measures tessera throughput against the synthetic site with
 // one and with several crawler processes sharing one Postgres and one Redis.
 //
 // It starts the fake site in-process (one port per "host", so per-host
 // politeness does not cap the result), creates one crawl per host, runs N
-// crawlerx subprocesses over the shared queue, and reports pages/s, fetch
+// tessera subprocesses over the shared queue, and reports pages/s, fetch
 // latency percentiles (from each process's Prometheus histogram) and peak
 // memory (RSS, sampled with ps).
 //
@@ -31,9 +31,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/db"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fakesite"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/db"
+	"github.com/wanderingtilldeath/tessera/internal/fakesite"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
 )
 
 type options struct {
@@ -80,7 +80,7 @@ func main() {
 	flag.IntVar(&o.workers, "workers", 16, "workers per crawler process")
 	flag.IntVar(&o.basePort, "base-port", 9300, "first fake-site port")
 	flag.IntVar(&o.metricsPort, "metrics-port", 9390, "first crawler metrics port")
-	flag.StringVar(&o.binary, "crawlerx", "", "path to a crawlerx binary (default: build one)")
+	flag.StringVar(&o.binary, "tessera", "", "path to a tessera binary (default: build one)")
 	flag.StringVar(&o.out, "out", "", "also write the markdown report to this file")
 	flag.Parse()
 
@@ -97,15 +97,15 @@ func main() {
 	}
 
 	if o.binary == "" {
-		dir, err := os.MkdirTemp("", "crawlerx-bench")
+		dir, err := os.MkdirTemp("", "tessera-bench")
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer os.RemoveAll(dir)
 
-		o.binary = filepath.Join(dir, "crawlerx")
-		log.Printf("building crawlerx...")
-		if out, err := exec.Command("go", "build", "-o", o.binary, "./cmd/crawlerx").CombinedOutput(); err != nil {
+		o.binary = filepath.Join(dir, "tessera")
+		log.Printf("building tessera...")
+		if out, err := exec.Command("go", "build", "-o", o.binary, "./cmd/tessera").CombinedOutput(); err != nil {
 			log.Fatalf("build: %v\n%s", err, out)
 		}
 	}
@@ -152,7 +152,7 @@ func runOnce(o options, procs int) (result, error) {
 	}
 	rdb := redis.NewClient(ropts)
 	defer rdb.Close()
-	if keys, _ := rdb.Keys(ctx, "crawlerx:*").Result(); len(keys) > 0 {
+	if keys, _ := rdb.Keys(ctx, "tessera:*").Result(); len(keys) > 0 {
 		rdb.Del(ctx, keys...)
 	}
 
@@ -263,7 +263,7 @@ func waitDone(ctx context.Context, pool *pgxpool.Pool, timeout time.Duration) er
 	return fmt.Errorf("crawl did not finish within %v", timeout)
 }
 
-// crawler is one crawlerx subprocess.
+// crawler is one tessera subprocess.
 type crawler struct {
 	cmd         *exec.Cmd
 	metricsAddr string
@@ -312,7 +312,7 @@ func startCrawler(o options, index int) (*crawler, error) {
 	}
 
 	c.stop()
-	return nil, fmt.Errorf("crawlerx %d did not become healthy", index)
+	return nil, fmt.Errorf("tessera %d did not become healthy", index)
 }
 
 func (c *crawler) sampleRSS() {
@@ -383,8 +383,8 @@ func (c *crawler) scrape() (buckets []bucket, retries, deferred int64) {
 		line := sc.Text()
 
 		switch {
-		case strings.HasPrefix(line, "crawlerx_fetch_duration_seconds_bucket{le=\""):
-			rest := strings.TrimPrefix(line, "crawlerx_fetch_duration_seconds_bucket{le=\"")
+		case strings.HasPrefix(line, "tessera_fetch_duration_seconds_bucket{le=\""):
+			rest := strings.TrimPrefix(line, "tessera_fetch_duration_seconds_bucket{le=\"")
 			end := strings.Index(rest, "\"")
 			if end < 0 {
 				continue
@@ -401,10 +401,10 @@ func (c *crawler) scrape() (buckets []bucket, retries, deferred int64) {
 			}
 			buckets = append(buckets, bucket{le: bound, count: count})
 
-		case strings.HasPrefix(line, "crawlerx_retries_total "):
+		case strings.HasPrefix(line, "tessera_retries_total "):
 			f, _ := strconv.ParseFloat(strings.Fields(line)[1], 64)
 			retries = int64(f)
-		case strings.HasPrefix(line, "crawlerx_gate_deferred_total "):
+		case strings.HasPrefix(line, "tessera_gate_deferred_total "):
 			f, _ := strconv.ParseFloat(strings.Fields(line)[1], 64)
 			deferred = int64(f)
 		}

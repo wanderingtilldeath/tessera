@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/urlnorm"
+	"github.com/wanderingtilldeath/tessera/internal/urlnorm"
 )
 
 const (
@@ -147,7 +147,7 @@ func (w *walker) meta(n *html.Node) {
 		if w.description == "" {
 			w.description = content
 		}
-	case "robots", "crawlerx":
+	case "robots", "tessera":
 		for _, token := range strings.Split(strings.ToLower(content), ",") {
 			switch strings.TrimSpace(token) {
 			case "noindex":

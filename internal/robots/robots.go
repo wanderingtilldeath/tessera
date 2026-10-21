@@ -54,7 +54,7 @@ type Cache interface {
 type Options struct {
 	// UserAgent is the full header value sent when fetching robots.txt.
 	UserAgent string
-	// Product is the token matched against User-agent groups (e.g. "CrawlerX").
+	// Product is the token matched against User-agent groups (e.g. "Tessera").
 	Product string
 	// HTTP is the client used to fetch robots.txt.
 	HTTP *http.Client
@@ -93,7 +93,7 @@ type cachedResponse struct {
 // New builds a Client.
 func New(opts Options) *Client {
 	if opts.Product == "" {
-		opts.Product = "CrawlerX"
+		opts.Product = "Tessera"
 	}
 	if opts.UserAgent == "" {
 		opts.UserAgent = opts.Product
@@ -169,7 +169,7 @@ func (c *Client) rulesFor(ctx context.Context, origin string) (*robotstxt.Robots
 }
 
 func (c *Client) load(ctx context.Context, origin string) (*robotstxt.RobotsData, error) {
-	cacheKey := "crawlerx:robots:" + origin
+	cacheKey := "tessera:robots:" + origin
 
 	if c.opts.Cache != nil {
 		if raw, ok, err := c.opts.Cache.Get(ctx, cacheKey); err == nil && ok {

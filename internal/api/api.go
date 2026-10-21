@@ -17,9 +17,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/urlnorm"
+	"github.com/wanderingtilldeath/tessera/internal/batch"
+	embedpkg "github.com/wanderingtilldeath/tessera/internal/embed"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/store"
+	"github.com/wanderingtilldeath/tessera/internal/urlnorm"
 )
 
 //go:embed static
@@ -35,6 +37,10 @@ const (
 type Deps struct {
 	Frontier frontier.Frontier
 	Store    store.Store
+	// Batches enables the /batches endpoints; nil leaves them off.
+	Batches batch.Registry
+	// Embedder embeds search queries; nil turns semantic search off (503).
+	Embedder embedpkg.Embedder
 	// Metrics serves GET /metrics (promhttp.HandlerFor in production).
 	Metrics http.Handler
 	// Checks are named dependency probes for GET /healthz.
@@ -56,6 +62,13 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("GET /crawls/{id}/export", s.exportChunks)
 	mux.HandleFunc("GET /crawls/{id}", s.getCrawl)
 	mux.HandleFunc("GET /search", s.search)
+	if deps.Batches != nil {
+		mux.HandleFunc("POST /batches", s.createBatch)
+		mux.HandleFunc("GET /batches", s.listBatches)
+		mux.HandleFunc("GET /batches/{id}", s.getBatch)
+		mux.HandleFunc("POST /batches/{id}/files", s.uploadFiles)
+		mux.HandleFunc("GET /search/semantic", s.searchSemantic)
+	}
 	mux.HandleFunc("GET /healthz", s.healthz)
 	if deps.Metrics != nil {
 		mux.Handle("GET /metrics", deps.Metrics)

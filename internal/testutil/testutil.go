@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/db"
+	"github.com/wanderingtilldeath/tessera/internal/db"
 )
 
 // Postgres returns a pool on a freshly created, migrated schema that is
@@ -28,7 +28,7 @@ func Postgres(t *testing.T) *pgxpool.Pool {
 }
 
 // PostgresWithURL is Postgres plus a connection URL for the same schema, for
-// tests that start crawlerx as a subprocess.
+// tests that start tessera as a subprocess.
 func PostgresWithURL(t *testing.T) (*pgxpool.Pool, string) {
 	t.Helper()
 
@@ -52,7 +52,8 @@ func PostgresWithURL(t *testing.T) (*pgxpool.Pool, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+	// public stays on the path: the pgvector extension is installed there.
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
@@ -74,10 +75,10 @@ func PostgresWithURL(t *testing.T) (*pgxpool.Pool, string) {
 		sep = "&"
 	}
 
-	return pool, url + sep + "search_path=" + schema
+	return pool, url + sep + "search_path=" + schema + ",public"
 }
 
-// Redis returns a client on the test Redis. Every "crawlerx:*" key is removed
+// Redis returns a client on the test Redis. Every "tessera:*" key is removed
 // when the test ends, so run packages that use it one at a time (go test -p 1,
 // as the Makefile does) so they do not delete each other's keys.
 func Redis(t *testing.T) *redis.Client {
@@ -96,7 +97,7 @@ func Redis(t *testing.T) *redis.Client {
 	client := redis.NewClient(opts)
 	t.Cleanup(func() {
 		ctx := context.Background()
-		keys, _ := client.Keys(ctx, "crawlerx:*").Result()
+		keys, _ := client.Keys(ctx, "tessera:*").Result()
 		if len(keys) > 0 {
 			client.Del(ctx, keys...)
 		}

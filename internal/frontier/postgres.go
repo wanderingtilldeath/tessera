@@ -49,8 +49,8 @@ func (p *Postgres) GetCrawl(ctx context.Context, id int64) (Crawl, error) {
 	var crawl Crawl
 
 	err := p.pool.QueryRow(ctx,
-		`SELECT id, seed, max_depth, allowed_hosts, path_prefixes, created_at FROM crawls WHERE id = $1`, id,
-	).Scan(&crawl.ID, &crawl.Seed, &crawl.MaxDepth, &crawl.AllowedHosts, &crawl.PathPrefixes, &crawl.CreatedAt)
+		`SELECT `+crawlCols+` FROM crawls WHERE id = $1`, id,
+	).Scan(&crawl.ID, &crawl.Seed, &crawl.MaxDepth, &crawl.AllowedHosts, &crawl.PathPrefixes, &crawl.BatchID, &crawl.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Crawl{}, ErrNotFound
 	}
@@ -67,17 +67,41 @@ func (p *Postgres) ListCrawls(ctx context.Context, limit int) ([]Crawl, error) {
 	}
 
 	rows, err := p.pool.Query(ctx,
-		`SELECT id, seed, max_depth, allowed_hosts, path_prefixes, created_at FROM crawls ORDER BY id DESC LIMIT $1`, limit)
+		`SELECT `+crawlCols+` FROM crawls ORDER BY id DESC LIMIT $1`, limit)
+	return scanCrawls(rows, err, "list crawls")
+}
+
+func (p *Postgres) SetCrawlBatch(ctx context.Context, crawlID, batchID int64) error {
+	tag, err := p.pool.Exec(ctx, `UPDATE crawls SET batch_id = $2 WHERE id = $1`, crawlID, batchID)
 	if err != nil {
-		return nil, fmt.Errorf("frontier: list crawls: %w", err)
+		return fmt.Errorf("frontier: set crawl batch: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+func (p *Postgres) BatchCrawls(ctx context.Context, batchID int64) ([]Crawl, error) {
+	rows, err := p.pool.Query(ctx, `SELECT `+crawlCols+` FROM crawls WHERE batch_id = $1 ORDER BY id`, batchID)
+	return scanCrawls(rows, err, "batch crawls")
+}
+
+// crawlCols is the column list scanCrawls and GetCrawl expect.
+const crawlCols = `id, seed, max_depth, allowed_hosts, path_prefixes, COALESCE(batch_id, 0), created_at`
+
+func scanCrawls(rows pgx.Rows, err error, what string) ([]Crawl, error) {
+	if err != nil {
+		return nil, fmt.Errorf("frontier: %s: %w", what, err)
 	}
 	defer rows.Close()
 
 	crawls := []Crawl{}
 	for rows.Next() {
 		var c Crawl
-		if err := rows.Scan(&c.ID, &c.Seed, &c.MaxDepth, &c.AllowedHosts, &c.PathPrefixes, &c.CreatedAt); err != nil {
-			return nil, fmt.Errorf("frontier: list crawls scan: %w", err)
+		if err := rows.Scan(&c.ID, &c.Seed, &c.MaxDepth, &c.AllowedHosts, &c.PathPrefixes, &c.BatchID, &c.CreatedAt); err != nil {
+			return nil, fmt.Errorf("frontier: %s scan: %w", what, err)
 		}
 		crawls = append(crawls, c)
 	}

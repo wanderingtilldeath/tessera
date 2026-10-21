@@ -50,18 +50,18 @@ Disallow: /search?
 Allow: /private/public/
 Crawl-delay: 2
 
-User-agent: crawlerx
+User-agent: tessera
 Disallow: /only-for-us/
 Crawl-delay: 7
 `)
 
 	// The specific group wins over "*" entirely.
-	c := New(Options{Product: "CrawlerX"})
+	c := New(Options{Product: "Tessera"})
 	if d := mustCheck(t, c, ts.URL+"/only-for-us/x"); d.Allowed {
-		t.Error("/only-for-us/ should be disallowed for CrawlerX")
+		t.Error("/only-for-us/ should be disallowed for Tessera")
 	}
 	if d := mustCheck(t, c, ts.URL+"/private/x"); !d.Allowed {
-		t.Error("/private/ is only disallowed for *, not for the CrawlerX group")
+		t.Error("/private/ is only disallowed for *, not for the Tessera group")
 	}
 	if d := mustCheck(t, c, ts.URL+"/"); d.CrawlDelay != 7*time.Second {
 		t.Errorf("CrawlDelay = %v, want 7s", d.CrawlDelay)
@@ -205,9 +205,9 @@ func TestClient_SendsUserAgent(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	mustCheck(t, New(Options{UserAgent: "CrawlerX/1.0 (+https://example.test)"}), ts.URL+"/x")
+	mustCheck(t, New(Options{UserAgent: "Tessera/1.0 (+https://example.test)"}), ts.URL+"/x")
 
-	if got.Load() != "CrawlerX/1.0 (+https://example.test)" {
+	if got.Load() != "Tessera/1.0 (+https://example.test)" {
 		t.Fatalf("User-Agent = %v", got.Load())
 	}
 }

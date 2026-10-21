@@ -20,7 +20,7 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Workers != 8 || cfg.HostDelay != time.Second || cfg.MaxBytes != 2<<20 || cfg.ListenAddr != ":8080" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
-	if !strings.Contains(cfg.UserAgent, "CrawlerX") || !strings.Contains(cfg.UserAgent, "+http") {
+	if !strings.Contains(cfg.UserAgent, "Tessera") || !strings.Contains(cfg.UserAgent, "+http") {
 		t.Fatalf("default UserAgent %q should identify the crawler with a contact URL", cfg.UserAgent)
 	}
 	if cfg.Seed != "" {
@@ -77,5 +77,20 @@ func TestLoadRejectsBadInput(t *testing.T) {
 				t.Fatalf("err = %v, want it to mention %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestLoadEmbedding(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x"}
+
+	cfg, err := Load(nil, env(base), io.Discard)
+	if err != nil || cfg.EmbedURL != "" || cfg.EmbedModel != "nomic-embed-text" {
+		t.Fatalf("embedding must be off unless configured: %+v, %v", cfg, err)
+	}
+
+	base["EMBED_URL"], base["EMBED_MODEL"] = "http://ollama:11434", "other-model"
+	cfg, err = Load([]string{"-embed-model", "flag-model"}, env(base), io.Discard)
+	if err != nil || cfg.EmbedURL != "http://ollama:11434" || cfg.EmbedModel != "flag-model" {
+		t.Fatalf("env gives the URL, the flag wins for the model: %+v, %v", cfg, err)
 	}
 }

@@ -29,32 +29,32 @@ type Metrics struct {
 func New(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
 		PagesTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "crawlerx_pages_total",
+			Name: "tessera_pages_total",
 			Help: "URLs that reached a terminal state, by status.",
 		}, []string{"status"}),
 		FetchDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Name:    "crawlerx_fetch_duration_seconds",
+			Name:    "tessera_fetch_duration_seconds",
 			Help:    "HTTP fetch latency (request start to end of capped body).",
 			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 		}),
 		QueueDepth: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "crawlerx_queue_depth",
+			Name: "tessera_queue_depth",
 			Help: "Pending URLs in the frontier.",
 		}),
 		Retries: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "crawlerx_retries_total",
+			Name: "tessera_retries_total",
 			Help: "Fetches rescheduled after a transient failure.",
 		}),
 		RobotsBlocked: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "crawlerx_robots_blocked_total",
+			Name: "tessera_robots_blocked_total",
 			Help: "URLs skipped because robots.txt disallows them.",
 		}),
 		HostInflight: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "crawlerx_host_inflight",
+			Name: "tessera_host_inflight",
 			Help: "Requests currently in flight, per host.",
 		}, []string{"host"}),
 		GateDeferred: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "crawlerx_gate_deferred_total",
+			Name: "tessera_gate_deferred_total",
 			Help: "Requests pushed back by the per-host politeness gate.",
 		}),
 	}
