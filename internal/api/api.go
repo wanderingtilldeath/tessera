@@ -17,11 +17,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/batch"
-	embedpkg "github.com/wanderingtilldeath/docs-rag-ingest/internal/embed"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/urlnorm"
+	"github.com/wanderingtilldeath/tessera/internal/batch"
+	embedpkg "github.com/wanderingtilldeath/tessera/internal/embed"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/store"
+	"github.com/wanderingtilldeath/tessera/internal/urlnorm"
 )
 
 //go:embed static

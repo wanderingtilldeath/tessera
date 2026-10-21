@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/parse"
+	"github.com/wanderingtilldeath/tessera/internal/parse"
 )
 
 // DefaultMaxChars is the chunk size cap used by the crawler.

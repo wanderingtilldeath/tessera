@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fakesite"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/testutil"
+	"github.com/wanderingtilldeath/tessera/internal/fakesite"
+	"github.com/wanderingtilldeath/tessera/internal/testutil"
 )
 
 func freeAddr(t *testing.T) string {
@@ -66,7 +66,7 @@ func TestBatchOfURLsAndFilesIsSearchable(t *testing.T) {
 	ollama := testutil.FakeOllama(t)
 
 	addr := freeAddr(t)
-	p := startCrawlerx(t, dbURL, "-listen", addr, "-embed-url", ollama.URL, "-host-delay", "10ms")
+	p := startTessera(t, dbURL, "-listen", addr, "-embed-url", ollama.URL, "-host-delay", "10ms")
 	api := "http://" + addr
 
 	waitFor(t, 20*time.Second, "API to come up", func() bool {

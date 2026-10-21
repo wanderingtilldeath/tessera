@@ -59,9 +59,9 @@ type Redis struct {
 }
 
 // NewRedis returns a Gate backed by client. Keys are namespaced under
-// "crawlerx:host:".
+// "tessera:host:".
 func NewRedis(client redis.Scripter) *Redis {
-	return &Redis{client: client, prefix: "crawlerx:host:"}
+	return &Redis{client: client, prefix: "tessera:host:"}
 }
 
 func (r *Redis) Acquire(ctx context.Context, host string, delay time.Duration) (time.Duration, error) {

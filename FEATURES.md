@@ -15,10 +15,10 @@ Living ledger of subsystems. Update with `/ledger-update` after behavioral or ar
 - **Production Trade-Offs**: At-least-once processing: a worker that dies mid-fetch causes a refetch, bounded by `MAX_ATTEMPTS` (default 5) before the row is `dead`. Postgres is the queue, so claim throughput is limited by one table and one index; fine for thousands of URLs/s, not millions.
 
 ### Crawl Worker Loop
-- **Status**: Active
-- **Last Updated**: 2026-10-20 @ 8410269
+- **Status**: Modified
+- **Last Updated**: 2026-10-21 @ b289496+uncommitted
 - **Entry Points / Key Files**:
-  - `cmd/crawlerx/main.go`: process bootstrap, flags, signal handling, `-seed`, `-exit-when-done`
+  - `cmd/tessera/main.go`: process bootstrap, flags, signal handling, `-seed`, `-exit-when-done`
   - `internal/crawler/crawler.go`: `Run`, `worker`, `process`, `handlePage`, `handleRedirect`
   - `internal/config/config.go`: flag > env > default configuration
 - **Implementation Summary**: Each process runs N workers (default 8) that claim one URL at a time and run: robots check, politeness gate, fetch, then parse, enqueue links, save page and chunks, and finish the row. On shutdown claiming stops immediately while in-flight fetches get a grace period. Anything that cannot reach a terminal state is released so another worker takes it at once.
@@ -26,12 +26,12 @@ Living ledger of subsystems. Update with `/ledger-update` after behavioral or ar
 - **Production Trade-Offs**: Busy hosts are rescheduled instead of slept on, so workers never block on one slow host. Redirects are not followed inline: the target is enqueued as a new link so robots, scope and depth limits still apply. Lease must exceed fetch timeout (validated at startup).
 
 ### Politeness Gate (per-host rate limiting)
-- **Status**: Active
-- **Last Updated**: 2026-10-20 @ 8410269
+- **Status**: Modified
+- **Last Updated**: 2026-10-21 @ b289496+uncommitted
 - **Entry Points / Key Files**:
   - `internal/politeness/politeness.go`: `Gate` interface, Redis Lua scripts, in-memory twin
 - **Implementation Summary**: A Lua script in Redis reserves the next request slot for a host atomically, using Redis server time so clock skew between crawlers does not matter. It never sleeps: a denied caller gets the wait time and reschedules the URL. `Penalize` pushes a host's next slot out after 429/503 with `Retry-After`.
-- **Data & Schema Dependencies**: Redis keys `crawlerx:host:<host>` with PX expiry.
+- **Data & Schema Dependencies**: Redis keys `tessera:host:<host>` with PX expiry (prefix renamed from `crawlerx:`; old keys are orphaned and harmless).
 - **Production Trade-Offs**: Redis is a hard dependency for multi-process politeness (a gate outage reschedules work by 2s rather than failing it). The gate is a single key per host, so one very hot host is serialized by design.
 
 ### Robots.txt Compliance
@@ -124,13 +124,13 @@ Living ledger of subsystems. Update with `/ledger-update` after behavioral or ar
 - **Production Trade-Offs**: **No authentication**, and `POST /crawls` and `POST /batches` make the server fetch arbitrary URLs (SSRF-prone), so it must sit on a private network. No per-client rate limiting.
 
 ### Observability
-- **Status**: Active
-- **Last Updated**: 2026-10-20 @ 8410269
+- **Status**: Modified
+- **Last Updated**: 2026-10-21 @ b289496+uncommitted
 - **Entry Points / Key Files**:
   - `internal/metrics/metrics.go`: Prometheus collectors (pages, fetch latency, queue depth, retries, robots blocks, per-host inflight, gate deferrals)
   - `deploy/prometheus.yml`: scrape config (compose `metrics` profile)
-  - `cmd/crawlerx/main.go`: `/metrics`, optional pprof server, structured `slog` logging
-- **Implementation Summary**: Counters and histograms are registered per process and exposed at `/metrics`. Queue depth is sampled periodically from the frontier. Logs are structured via `log/slog`.
+  - `cmd/tessera/main.go`: `/metrics`, optional pprof server, structured `slog` logging
+- **Implementation Summary**: Metric names use the `tessera_` prefix (renamed from `crawlerx_`; old dashboards and alerts break). Counters and histograms are registered per process and exposed at `/metrics`. Queue depth is sampled periodically from the frontier. Logs are structured via `log/slog`.
 - **Data & Schema Dependencies**: Prometheus (optional); no persistent state.
 - **Production Trade-Offs**: Per-host inflight gauge has host-cardinality, which can grow large when crawling many hosts.
 
@@ -149,12 +149,12 @@ Living ledger of subsystems. Update with `/ledger-update` after behavioral or ar
 - **Production Trade-Offs**: Integration tests serialize (`-p 1`), so the full suite is slow. There is no CI workflow (removed in commit `f6161b2`; deployments are manual), so tests only run when someone runs them.
 
 ### Deployment & Local Stack
-- **Status**: Active
-- **Last Updated**: 2026-10-20 @ 8410269
+- **Status**: Modified
+- **Last Updated**: 2026-10-21 @ b289496+uncommitted
 - **Entry Points / Key Files**:
   - `docker-compose.yml`: Postgres (pgvector 0.8 / PG17), Redis, Ollama, model pull, fakesite, two crawlers, optional Prometheus
-  - `Dockerfile`: multi-stage build, one image per `TARGET` (`crawlerx` or `fakesite`), distroless nonroot runtime
+  - `Dockerfile`: multi-stage build, one image per `TARGET` (`tessera` or `fakesite`), distroless nonroot runtime
   - `internal/db/db.go`: opens the pool and applies goose migrations embedded in the binary (`internal/db/migrations/`)
 - **Implementation Summary**: `make up` starts the whole stack, with two crawler processes demonstrating multi-process coordination. Migrations run from the embedded SQL files at startup. The model (~270 MB) is pulled into `./.ollama` on first start.
 - **Data & Schema Dependencies**: Postgres needs pgvector 0.8+ and a role allowed to `CREATE EXTENSION vector` (migration 00003).
-- **Production Trade-Offs**: Compose credentials are development defaults (`crawlerx`/`crawlerx`) and Postgres and Redis ports are published to the host. Both crawlers run the API, so any instance can serve requests. There is no orchestration config beyond compose.
+- **Production Trade-Offs**: Project renamed from CrawlerX to Tessera: after upgrading run `make down` then `make up` so Postgres is recreated with the new `tessera` user and database. Compose credentials are development defaults (`tessera`/`tessera`) and Postgres and Redis ports are published to the host. Both crawlers run the API, so any instance can serve requests. There is no orchestration config beyond compose.

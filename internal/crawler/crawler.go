@@ -20,15 +20,15 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/chunk"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fetch"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/metrics"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/parse"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/politeness"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/robots"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/urlnorm"
+	"github.com/wanderingtilldeath/tessera/internal/chunk"
+	"github.com/wanderingtilldeath/tessera/internal/fetch"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/metrics"
+	"github.com/wanderingtilldeath/tessera/internal/parse"
+	"github.com/wanderingtilldeath/tessera/internal/politeness"
+	"github.com/wanderingtilldeath/tessera/internal/robots"
+	"github.com/wanderingtilldeath/tessera/internal/store"
+	"github.com/wanderingtilldeath/tessera/internal/urlnorm"
 )
 
 // Config controls the worker pool. Zero values pick defaults.

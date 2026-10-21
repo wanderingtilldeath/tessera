@@ -1,4 +1,4 @@
-module github.com/wanderingtilldeath/docs-rag-ingest
+module github.com/wanderingtilldeath/tessera
 
 go 1.26.0
 

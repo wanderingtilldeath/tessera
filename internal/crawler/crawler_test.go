@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fetch"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/politeness"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/robots"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
+	"github.com/wanderingtilldeath/tessera/internal/fetch"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/politeness"
+	"github.com/wanderingtilldeath/tessera/internal/robots"
+	"github.com/wanderingtilldeath/tessera/internal/store"
 )
 
 func TestCrawler_RespectsMaxDepth(t *testing.T) {
@@ -187,7 +187,7 @@ func TestCrawler_RobotsDisallowIsNotFetched(t *testing.T) {
 	defer ts.Close()
 
 	h := newHarness(t, testConfig(), func(d *Deps) {
-		d.Robots = robots.New(robots.Options{Product: "CrawlerX"})
+		d.Robots = robots.New(robots.Options{Product: "Tessera"})
 	})
 	crawl := h.crawl(t, ts.URL+"/", 1)
 

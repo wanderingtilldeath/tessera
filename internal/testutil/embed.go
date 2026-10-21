@@ -10,7 +10,7 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/embed"
+	"github.com/wanderingtilldeath/tessera/internal/embed"
 )
 
 // FakeVector is a deterministic stand-in for an embedding model: a hashed

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/testutil"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/testutil"
 )
 
 // TestPostgresTwoProcessesShareOneQueue models two crawler processes (two

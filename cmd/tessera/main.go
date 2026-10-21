@@ -1,4 +1,4 @@
-// Command crawlerx is a resumable, polite web crawler. Any number of
+// Command tessera is a resumable, polite web crawler. Any number of
 // processes can share one Postgres (work queue) and one Redis (per-host
 // politeness gate), and a killed process loses no work: its leased URLs are
 // picked up by the others once the lease expires.
@@ -23,19 +23,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/api"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/batch"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/config"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/crawler"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/db"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/embed"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fetch"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/metrics"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/politeness"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/robots"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/urlnorm"
+	"github.com/wanderingtilldeath/tessera/internal/api"
+	"github.com/wanderingtilldeath/tessera/internal/batch"
+	"github.com/wanderingtilldeath/tessera/internal/config"
+	"github.com/wanderingtilldeath/tessera/internal/crawler"
+	"github.com/wanderingtilldeath/tessera/internal/db"
+	"github.com/wanderingtilldeath/tessera/internal/embed"
+	"github.com/wanderingtilldeath/tessera/internal/fetch"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/metrics"
+	"github.com/wanderingtilldeath/tessera/internal/politeness"
+	"github.com/wanderingtilldeath/tessera/internal/robots"
+	"github.com/wanderingtilldeath/tessera/internal/store"
+	"github.com/wanderingtilldeath/tessera/internal/urlnorm"
 )
 
 func main() {
@@ -44,7 +44,7 @@ func main() {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
-		fmt.Fprintln(os.Stderr, "crawlerx:", err)
+		fmt.Fprintln(os.Stderr, "tessera:", err)
 		os.Exit(2)
 	}
 
@@ -54,7 +54,7 @@ func main() {
 	defer stop()
 
 	if err := run(ctx, stop, cfg, logger); err != nil {
-		logger.Error("crawlerx failed", "error", err)
+		logger.Error("tessera failed", "error", err)
 		os.Exit(1)
 	}
 }
@@ -177,7 +177,7 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 		}
 	}
 
-	logger.Info("crawlerx running", "workers", cfg.Workers, "host_delay", cfg.HostDelay, "api", cfg.ListenAddr)
+	logger.Info("tessera running", "workers", cfg.Workers, "host_delay", cfg.HostDelay, "api", cfg.ListenAddr)
 
 	if cfg.Workers > 0 {
 		_ = c.Run(ctx)
@@ -274,7 +274,7 @@ func newLogger(cfg config.Config) *slog.Logger {
 }
 
 // userAgentProduct returns the leading product token of a User-Agent
-// ("CrawlerX/1.0 (+url)" -> "CrawlerX"), which is what robots.txt groups
+// ("Tessera/1.0 (+url)" -> "Tessera"), which is what robots.txt groups
 // are matched against.
 func userAgentProduct(ua string) string {
 	if i := strings.IndexAny(ua, "/ "); i > 0 {

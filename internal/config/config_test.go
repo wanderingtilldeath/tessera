@@ -20,7 +20,7 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Workers != 8 || cfg.HostDelay != time.Second || cfg.MaxBytes != 2<<20 || cfg.ListenAddr != ":8080" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
-	if !strings.Contains(cfg.UserAgent, "CrawlerX") || !strings.Contains(cfg.UserAgent, "+http") {
+	if !strings.Contains(cfg.UserAgent, "Tessera") || !strings.Contains(cfg.UserAgent, "+http") {
 		t.Fatalf("default UserAgent %q should identify the crawler with a contact URL", cfg.UserAgent)
 	}
 	if cfg.Seed != "" {

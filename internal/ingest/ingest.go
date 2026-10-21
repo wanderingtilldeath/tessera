@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/batch"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/chunk"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
+	"github.com/wanderingtilldeath/tessera/internal/batch"
+	"github.com/wanderingtilldeath/tessera/internal/chunk"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/store"
 )
 
 const maxNameLen = 200

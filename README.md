@@ -1,4 +1,4 @@
-# CrawlerX
+# Tessera
 
 Feed it documents (page URLs and uploaded PDF, Markdown, HTML or text files), press **Start** in the dashboard, then search inside them by meaning. Under the hood it is a resumable, polite web crawler in Go. Work lives in Postgres (a lease-based queue using `FOR UPDATE SKIP LOCKED`), per-host politeness is shared through Redis, and any number of processes can crawl together. Kill one with `kill -9` and the rest (or a restart) finish its work without re-crawling pages that were already done.
 
@@ -31,17 +31,17 @@ curl 'localhost:8081/search/semantic?q=how+many+vacation+days&batch=1'   # omit 
 curl 'localhost:8081/search/semantic?q=how+many+vacation+days&batch=1&page=2'   # next 10 results
 ```
 
-Other endpoints: `POST /crawls` and `GET /crawls/1` (a single crawl; `path_prefixes` limits it to URL paths such as `/docs/`, and `crawlerx -seed` takes `-path-prefixes` / `PATH_PREFIXES`), `GET /search?q=nebula` (keyword search over page titles and descriptions), `GET /metrics`.
+Other endpoints: `POST /crawls` and `GET /crawls/1` (a single crawl; `path_prefixes` limits it to URL paths such as `/docs/`, and `tessera -seed` takes `-path-prefixes` / `PATH_PREFIXES`), `GET /search?q=nebula` (keyword search over page titles and descriptions), `GET /metrics`.
 
 Without Docker, run Postgres and Redis yourself:
 
 ```sh
 export DATABASE_URL=postgres://... REDIS_URL=redis://...
 go run ./cmd/fakesite -pages 500 &
-go run ./cmd/crawlerx -seed http://127.0.0.1:9000/ -max-depth 6 -exit-when-done
+go run ./cmd/tessera -seed http://127.0.0.1:9000/ -max-depth 6 -exit-when-done
 ```
 
-To **resume** after a crash, restart `crawlerx` *without* `-seed`: it works whatever is pending. (`-seed` starts a new crawl.)
+To **resume** after a crash, restart `tessera` *without* `-seed`: it works whatever is pending. (`-seed` starts a new crawl.)
 
 ## How it works
 
@@ -56,7 +56,7 @@ To **resume** after a crash, restart `crawlerx` *without* `-seed`: it works what
 | `internal/batch`, `internal/ingest` | batches of documents; text extraction from PDF, Markdown, HTML and text uploads into the same chunks the crawler produces |
 | `internal/embed` | background embedding of chunks through Ollama; crawling never waits on it, and chunks without a vector just stay pending until the model is reachable |
 
-Config is flags with env fallbacks: see `go run ./cmd/crawlerx -h`.
+Config is flags with env fallbacks: see `go run ./cmd/tessera -h`.
 
 ## Tests
 

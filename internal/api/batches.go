@@ -11,11 +11,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/batch"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/ingest"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/urlnorm"
+	"github.com/wanderingtilldeath/tessera/internal/batch"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/ingest"
+	"github.com/wanderingtilldeath/tessera/internal/store"
+	"github.com/wanderingtilldeath/tessera/internal/urlnorm"
 )
 
 const (

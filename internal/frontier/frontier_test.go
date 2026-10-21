@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/testutil"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/testutil"
 )
 
 // backend is one Frontier implementation plus a way to advance its clock.

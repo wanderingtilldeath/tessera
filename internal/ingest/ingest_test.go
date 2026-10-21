@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/batch"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
+	"github.com/wanderingtilldeath/tessera/internal/batch"
+	"github.com/wanderingtilldeath/tessera/internal/store"
 )
 
 func TestKindOf(t *testing.T) {

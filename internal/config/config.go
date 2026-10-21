@@ -1,4 +1,4 @@
-// Package config reads crawlerx's settings from flags, with environment
+// Package config reads tessera's settings from flags, with environment
 // variables as the defaults (flag > env > built-in default), so the same
 // binary runs from a shell, a container or a compose file.
 package config
@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fetch"
+	"github.com/wanderingtilldeath/tessera/internal/fetch"
 )
 
 // Config is the full runtime configuration.
@@ -64,7 +64,7 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 		pathPrefixes string
 	)
 
-	fs := flag.NewFlagSet("crawlerx", flag.ContinueOnError)
+	fs := flag.NewFlagSet("tessera", flag.ContinueOnError)
 	fs.SetOutput(out)
 
 	fs.StringVar(&cfg.DatabaseURL, "database-url", env.str("DATABASE_URL", ""), "Postgres connection URL (env DATABASE_URL, required)")

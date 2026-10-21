@@ -1,5 +1,5 @@
 # Integration tests need Postgres + Redis: `make up` first, or point these elsewhere.
-export TEST_DATABASE_URL ?= postgres://crawlerx:crawlerx@localhost:5432/crawlerx?sslmode=disable
+export TEST_DATABASE_URL ?= postgres://tessera:tessera@localhost:5432/tessera?sslmode=disable
 export TEST_REDIS_URL ?= redis://localhost:6379/0
 
 .PHONY: up down build test test-short test-integration lint bench fuzz

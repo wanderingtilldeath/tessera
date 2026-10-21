@@ -12,7 +12,7 @@ import (
 
 	"github.com/ledongthuc/pdf"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/parse"
+	"github.com/wanderingtilldeath/tessera/internal/parse"
 )
 
 // Kinds of file Extract understands.

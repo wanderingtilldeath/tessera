@@ -17,7 +17,7 @@ import (
 
 // DefaultUserAgent identifies the crawler honestly. Operators should override
 // it with their own contact URL (see -user-agent).
-const DefaultUserAgent = "CrawlerX/1.0 (+https://github.com/wanderingtilldeath/docs-rag-ingest)"
+const DefaultUserAgent = "Tessera/1.0 (+https://github.com/wanderingtilldeath/tessera)"
 
 // ErrUnsupportedContentType is returned for a successful response whose body
 // is not HTML. It is permanent: retrying will not change the content type.

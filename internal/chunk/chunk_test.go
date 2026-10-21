@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/parse"
+	"github.com/wanderingtilldeath/tessera/internal/parse"
 )
 
 func TestSplit(t *testing.T) {

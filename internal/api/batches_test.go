@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/batch"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/testutil"
+	"github.com/wanderingtilldeath/tessera/internal/batch"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/store"
+	"github.com/wanderingtilldeath/tessera/internal/testutil"
 )
 
 type upload struct{ name, content string }

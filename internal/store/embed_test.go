@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/chunk"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/frontier"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/testutil"
+	"github.com/wanderingtilldeath/tessera/internal/chunk"
+	"github.com/wanderingtilldeath/tessera/internal/frontier"
+	"github.com/wanderingtilldeath/tessera/internal/store"
+	"github.com/wanderingtilldeath/tessera/internal/testutil"
 )
 
 // eachStore runs fn against the in-memory store and, when a test database is

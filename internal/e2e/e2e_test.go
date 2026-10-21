@@ -1,4 +1,4 @@
-// Package e2e runs the real crawlerx binary against the fake site, Postgres
+// Package e2e runs the real tessera binary against the fake site, Postgres
 // and Redis: kill -9 and resume, shutdown, and two processes sharing one
 // politeness gate. It needs TEST_DATABASE_URL and TEST_REDIS_URL, and is
 // skipped under -short.
@@ -21,8 +21,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fakesite"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/testutil"
+	"github.com/wanderingtilldeath/tessera/internal/fakesite"
+	"github.com/wanderingtilldeath/tessera/internal/testutil"
 )
 
 var binary string
@@ -35,17 +35,17 @@ func TestMain(m *testing.M) {
 			return m.Run() // every test skips itself
 		}
 
-		dir, err := os.MkdirTemp("", "crawlerx-e2e")
+		dir, err := os.MkdirTemp("", "tessera-e2e")
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
 		defer os.RemoveAll(dir)
 
-		binary = filepath.Join(dir, "crawlerx")
-		build := exec.Command("go", "build", "-race", "-o", binary, "../../cmd/crawlerx")
+		binary = filepath.Join(dir, "tessera")
+		build := exec.Command("go", "build", "-race", "-o", binary, "../../cmd/tessera")
 		if out, err := build.CombinedOutput(); err != nil {
-			fmt.Fprintf(os.Stderr, "build crawlerx: %v\n%s", err, out)
+			fmt.Fprintf(os.Stderr, "build tessera: %v\n%s", err, out)
 			return 1
 		}
 
@@ -66,7 +66,7 @@ func requireEnv(t *testing.T) {
 	}
 }
 
-// proc is a running crawlerx process.
+// proc is a running tessera process.
 type proc struct {
 	cmd    *exec.Cmd
 	out    *bytes.Buffer
@@ -74,7 +74,7 @@ type proc struct {
 	err    error         // valid once exited is closed
 }
 
-func startCrawlerx(t *testing.T, dbURL string, args ...string) *proc {
+func startTessera(t *testing.T, dbURL string, args ...string) *proc {
 	t.Helper()
 
 	base := []string{
@@ -187,7 +187,7 @@ func TestKillNineAndResumeDoesNotRecrawl(t *testing.T) {
 	defer ts.Close()
 
 	// Process A starts the crawl.
-	a := startCrawlerx(t, dbURL, "-seed", ts.URL+"/", "-max-depth", "10", "-host-delay", "5ms", "-max-attempts", "5")
+	a := startTessera(t, dbURL, "-seed", ts.URL+"/", "-max-depth", "10", "-host-delay", "5ms", "-max-attempts", "5")
 
 	waitFor(t, 30*time.Second, "~60 pages done", func() bool { return statusCounts(t, pool)["done"] >= 60 })
 
@@ -213,7 +213,7 @@ func TestKillNineAndResumeDoesNotRecrawl(t *testing.T) {
 	}
 
 	// Process B restarts WITHOUT a seed: it just works the shared queue.
-	b := startCrawlerx(t, dbURL, "-host-delay", "5ms", "-max-attempts", "5")
+	b := startTessera(t, dbURL, "-host-delay", "5ms", "-max-attempts", "5")
 
 	waitFor(t, 60*time.Second, "crawl to complete", func() bool {
 		c := statusCounts(t, pool)
@@ -268,7 +268,7 @@ func TestSIGTERMReleasesLeasesAndExitsCleanly(t *testing.T) {
 	ts := httptest.NewServer(site)
 	defer ts.Close()
 
-	p := startCrawlerx(t, dbURL, "-seed", ts.URL+"/", "-max-depth", "10", "-host-delay", "5ms")
+	p := startTessera(t, dbURL, "-seed", ts.URL+"/", "-max-depth", "10", "-host-delay", "5ms")
 
 	waitFor(t, 30*time.Second, "crawl under way", func() bool {
 		c := statusCounts(t, pool)
@@ -299,8 +299,8 @@ func TestTwoProcessesShareOneHostGate(t *testing.T) {
 	const delay = 250 * time.Millisecond
 
 	args := []string{"-host-delay", delay.String(), "-host-inflight", "4"}
-	a := startCrawlerx(t, dbURL, append([]string{"-seed", ts.URL + "/", "-max-depth", "10"}, args...)...)
-	b := startCrawlerx(t, dbURL, args...)
+	a := startTessera(t, dbURL, append([]string{"-seed", ts.URL + "/", "-max-depth", "10"}, args...)...)
+	b := startTessera(t, dbURL, args...)
 
 	waitFor(t, 60*time.Second, "crawl to complete", func() bool {
 		c := statusCounts(t, pool)

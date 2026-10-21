@@ -1,5 +1,5 @@
 // Command fakesite serves a synthetic, deterministic website for testing and
-// benchmarking crawlerx. It can listen on several consecutive ports; each
+// benchmarking tessera. It can listen on several consecutive ports; each
 // port counts as a separate host to the crawler, so per-host politeness does
 // not cap the benchmark's throughput.
 package main
@@ -18,7 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/fakesite"
+	"github.com/wanderingtilldeath/tessera/internal/fakesite"
 )
 
 func main() {

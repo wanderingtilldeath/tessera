@@ -8,8 +8,8 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/batch"
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/store"
+	"github.com/wanderingtilldeath/tessera/internal/batch"
+	"github.com/wanderingtilldeath/tessera/internal/store"
 )
 
 // pdfFrom assembles a PDF from numbered object bodies (object 1 must be the catalog).

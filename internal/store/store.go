@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/wanderingtilldeath/docs-rag-ingest/internal/chunk"
+	"github.com/wanderingtilldeath/tessera/internal/chunk"
 )
 
 // Page is one stored document.
