@@ -4,9 +4,75 @@
 
 Give Tessera page URLs and uploaded PDF, Markdown, HTML or text files. It cuts them into small heading-aware passages, embeds each passage locally with [Ollama](https://ollama.com), stores the vectors in Postgres with [pgvector](https://github.com/pgvector/pgvector), and lets you ask questions in your own words. Under the hood it is a resumable, polite web crawler in Go: work lives in Postgres (a lease-based queue using `FOR UPDATE SKIP LOCKED`), per-host politeness is shared through Redis, and any number of processes can crawl together. Kill one with `kill -9` and the rest (or a restart) finish its work without re-crawling pages that were already done.
 
+![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-politeness%20gate-DC382D?logo=redis&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-compose-2496ED?logo=docker&logoColor=white)
+![Prometheus](https://img.shields.io/badge/Prometheus-metrics-E6522C?logo=prometheus&logoColor=white)
+
 *Why "Tessera"?* A tessera is one small tile of a mosaic. Each passage is a tile; search finds the tiles that fit your question. (Formerly CrawlerX, repo `docs-rag-ingest`: see [Upgrading from CrawlerX](#upgrading-from-crawlerx).)
 
 > **Only crawl your own site, or sites that allow it.** The API has no authentication and `POST /crawls` and `POST /batches` make the server fetch URLs. Keep it on a private network.
+
+## The problem
+
+Feeding a RAG system from documents is harder than "fetch pages, split text":
+
+- **Crawlers die.** A long crawl that crashes at page 8,000 shouldn't start over or re-fetch what it already has.
+- **Being rude gets you banned.** You need `robots.txt`, per-host rate limits, `Retry-After`, and backoff.
+- **Raw HTML is noisy.** Nav bars, footers, and sidebars pollute embeddings and retrieval.
+- **Fixed-size splits lose context.** A chunk should know which page and heading it came from.
+- **Re-crawls are wasteful.** Unchanged pages shouldn't be re-chunked or re-embedded.
+- **Not everything is a web page.** Handbooks live in PDFs and Markdown files, and they belong in the same search.
+
+## Features
+
+- **Crash-safe and resumable**: work lives in Postgres. `kill -9` it, restart without `-seed`, and it finishes what's pending without re-crawling completed pages.
+- **Polite by default**: RFC 9309 `robots.txt` (Allow/Disallow, wildcards, Crawl-delay), one request slot per host per delay shared across processes, `Retry-After`, full-jitter backoff, honest User-Agent.
+- **Batches of documents**: page URLs and uploaded PDF, Markdown, HTML or text files, searched together or one by one.
+- **Semantic search**: passages embedded in the background with `nomic-embed-text`, searched with pgvector. Crawling never waits on embedding.
+- **RAG-ready export**: main-content extraction, heading-aware chunks (max 1500 chars), stable content hashes, JSONL export.
+- **Scoped crawling**: depth limit (shallowest-first, so "N hops" means N hops), `path_prefixes` to stay inside `/docs/`, and an allowed-host list.
+- **Incremental**: unchanged pages and files keep their chunks and vectors; ETag / Last-Modified are stored.
+- **Keyword search** over crawled pages (`tsvector` + GIN) and a small built-in dashboard.
+- **Observable**: Prometheus metrics at `/metrics`, health check at `/healthz`.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Client([Client / curl / dashboard]) -->|REST| API[internal/api]
+    API -->|batches, uploads, search, export| PG[(PostgreSQL + pgvector)]
+    API -->|embed query| OL([Ollama])
+
+    subgraph Tessera process
+        direction TB
+        W[Worker pool<br/>internal/crawler] -->|claim URL<br/>SKIP LOCKED + lease| F[Frontier<br/>internal/frontier]
+        W --> P[Politeness gate<br/>per-host slots]
+        W --> R[robots.txt cache]
+        W --> FE[Fetcher<br/>size cap, retries, backoff]
+        FE --> PA[Parser + URL normaliser]
+        PA --> CH[Chunker<br/>h1-h3 aware]
+        CH --> S[Store<br/>batched writes]
+        EM[Embedder loop<br/>internal/embed] -->|chunks without a vector| S
+    end
+
+    F <--> PG
+    S --> PG
+    P <--> RD[(Redis)]
+    R <--> RD
+    EM -->|documents| OL
+    FE -->|HTTP| Web([Target site])
+    W -. metrics .-> Prom[(Prometheus)]
+```
+
+**Crawl loop**, per worker:
+
+1. **Claim** the shallowest pending URL from Postgres with `FOR UPDATE SKIP LOCKED` and a lease. If the process dies, the lease expires and the URL is re-claimed.
+2. **Politeness check**: if the host's slot isn't free, the URL is rescheduled (not slept on), so workers never block each other.
+3. **robots.txt check**, then **fetch** (2 MiB cap, HTML only, redirects are queued like any other link).
+4. **Parse** once: title, main content, links, `<base href>`, meta robots. Links are canonicalised and enqueued; the visited set is the same table as the queue.
+5. **Chunk** the main content at h1-h3 and **store** pages and chunks in batches. The embedder loop adds vectors later.
 
 ## Quick start
 
@@ -38,14 +104,18 @@ curl 'localhost:8081/search/semantic?q=how+many+vacation+days&batch=1'          
 curl 'localhost:8081/search/semantic?q=how+many+vacation+days&batch=1&page=2'   # next 10 results
 ```
 
-Other endpoints:
-
-| endpoint | purpose |
-|---|---|
-| `POST /crawls`, `GET /crawls/1` | a single crawl; `path_prefixes` limits it to URL paths such as `/docs/` |
-| `GET /crawls/{id}/export` | the crawl's chunks as JSONL (`{id, url, title, heading, text, content_hash}`), if you would rather embed them yourself |
-| `GET /search?q=nebula` | keyword search over page titles and descriptions |
-| `GET /metrics`, `GET /healthz` | Prometheus metrics, health check |
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/batches` | Start a batch (`name`, `urls`, `max_depth`, `allowed_hosts`, `path_prefixes`) |
+| `GET` | `/batches`, `/batches/{id}` | List batches; progress for one, `done: true` when finished |
+| `POST` | `/batches/{id}/files` | Upload PDF, Markdown, HTML or text files |
+| `GET` | `/search/semantic?q=` | Search by meaning (`batch`, repeatable `url`, `page`, `limit`) |
+| `POST` | `/crawls` | Start a single crawl (`seed`, `max_depth`, `path_prefixes`) |
+| `GET` | `/crawls`, `/crawls/{id}` | List crawls; counts by status for one |
+| `GET` | `/crawls/{id}/depths` | Pages per depth |
+| `GET` | `/crawls/{id}/export` | The crawl's chunks as JSONL (`{id, url, title, heading, text, content_hash}`), if you would rather embed them yourself |
+| `GET` | `/search?q=nebula` | Keyword search over page titles and descriptions |
+| `GET` | `/healthz`, `/metrics` | Health check, Prometheus metrics |
 
 ## Run without Docker
 
@@ -70,11 +140,28 @@ Config is flags with env fallbacks: see `go run ./cmd/tessera -h`.
 | `internal/robots` | RFC 9309 via `temoto/robotstxt`: Allow/Disallow, wildcards, Crawl-delay; 4xx = allow, 5xx = disallow; cached in Redis |
 | `internal/fetch` | size cap (2 MiB), HTML only, honest User-Agent, no inline redirects (a redirect target is queued like any link), `Retry-After`, full-jitter backoff |
 | `internal/parse`, `internal/urlnorm` | one parse per page; `<base href>`, meta robots; URL canonicalisation with a fuzz test |
+| `internal/chunk` | heading-aware splitting into chunks of at most 1500 characters |
 | `internal/store` | batched page writes, `tsvector` + GIN full-text search, ETag/Last-Modified, chunk vectors (pgvector) |
 | `internal/batch`, `internal/ingest` | batches of documents; text extraction from PDF, Markdown, HTML and text uploads into the same chunks the crawler produces |
 | `internal/embed` | background embedding of chunks through Ollama; crawling never waits on it, and chunks without a vector just stay pending until the model is reachable |
+| `internal/api` | REST API and embedded dashboard |
+| `internal/metrics`, `internal/db` | Prometheus collectors; connection and embedded SQL migrations |
+| `internal/fakesite`, `cmd/fakesite` | synthetic site for tests and benchmarks |
 
 `FEATURES.md` is the living ledger of subsystems, with entry points, data dependencies and trade-offs. Concept notes: [docs/CONCEPTS.md](docs/CONCEPTS.md).
+
+## Tech stack
+
+| Area | Choice |
+|---|---|
+| Language | Go 1.26 (standard library `net/http` mux, `embed`) |
+| Database / queue | PostgreSQL via `pgx/v5` (leases with `SKIP LOCKED`, `tsvector` + GIN search, pgvector HNSW) |
+| Shared state | Redis (per-host politeness gate, robots.txt cache) |
+| Embeddings | Ollama, `nomic-embed-text` (768 dimensions) |
+| robots.txt | `temoto/robotstxt` |
+| Metrics | Prometheus `client_golang` |
+| Packaging | Docker, Docker Compose |
+| Testing | `go test` with `-race`, fuzz tests, end-to-end `kill -9` / SIGTERM tests |
 
 ## Semantic search and embeddings
 
@@ -98,9 +185,18 @@ Each batch is searched on its own: the same URL may belong to several batches.
 ```sh
 go test -short ./...                      # no services needed
 make test                                 # all tests, -race, needs TEST_DATABASE_URL and TEST_REDIS_URL (`make up` first)
+make bench                                # throughput benchmark
 ```
 
-The suite includes the original deadlock regression (`internal/crawler/deadlock_test.go`) and end-to-end `kill -9` / SIGTERM / two-process tests (`internal/e2e`). Benchmark: `make bench`, results and caveats in [docs/BENCHMARK.md](docs/BENCHMARK.md).
+The suite includes the original deadlock regression (`internal/crawler/deadlock_test.go`) and end-to-end `kill -9` / SIGTERM / two-process tests (`internal/e2e`). Benchmark results and caveats: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+
+## Limitations
+
+- Static HTML only; no JavaScript rendering.
+- No OCR: a scanned PDF with no text layer is reported as unreadable.
+- Search is vector-only (no reranking, no keyword blend) and returns at most 100 results.
+- No built-in authentication on the API, and no per-client rate limiting.
+- No CI workflow; deployments are manual.
 
 ## Upgrading from CrawlerX
 
