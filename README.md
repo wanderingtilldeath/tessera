@@ -1,17 +1,22 @@
 # Tessera
 
-Feed it documents (page URLs and uploaded PDF, Markdown, HTML or text files), press **Start** in the dashboard, then search inside them by meaning. Under the hood it is a resumable, polite web crawler in Go. Work lives in Postgres (a lease-based queue using `FOR UPDATE SKIP LOCKED`), per-host politeness is shared through Redis, and any number of processes can crawl together. Kill one with `kill -9` and the rest (or a restart) finish its work without re-crawling pages that were already done.
+**Feed it documents, search them by meaning.**
 
-**Only crawl your own site, or sites that allow it.** The API has no authentication and `POST /crawls` makes the server fetch URLs: keep it on a private network.
+Give Tessera page URLs and uploaded PDF, Markdown, HTML or text files. It cuts them into small heading-aware passages, embeds each passage locally with [Ollama](https://ollama.com), stores the vectors in Postgres with [pgvector](https://github.com/pgvector/pgvector), and lets you ask questions in your own words. Under the hood it is a resumable, polite web crawler in Go: work lives in Postgres (a lease-based queue using `FOR UPDATE SKIP LOCKED`), per-host politeness is shared through Redis, and any number of processes can crawl together. Kill one with `kill -9` and the rest (or a restart) finish its work without re-crawling pages that were already done.
+
+*Why "Tessera"?* A tessera is one small tile of a mosaic. Each passage is a tile; search finds the tiles that fit your question. (Formerly CrawlerX, repo `docs-rag-ingest`: see [Upgrading from CrawlerX](#upgrading-from-crawlerx).)
+
+> **Only crawl your own site, or sites that allow it.** The API has no authentication and `POST /crawls` and `POST /batches` make the server fetch URLs. Keep it on a private network.
 
 ## Quick start
 
 ```sh
+git clone git@github.com:wanderingtilldeath/tessera.git && cd tessera
 make up                                   # postgres+pgvector, redis, ollama, fakesite, 2 crawlers (needs Docker)
 open http://localhost:8081                # the dashboard
 ```
 
-The first `make up` downloads the embedding model (about 270 MB, into `./.ollama`). Crawling works while it downloads; passages become searchable as they are embedded.
+The first `make up` downloads the embedding model (about 270 MB, into `./.ollama`). Crawling works while it downloads; passages become searchable as they are embedded. `make down` stops everything and removes the volumes.
 
 In the dashboard:
 
@@ -21,19 +26,30 @@ In the dashboard:
 
 The page is plain files under `internal/api/static/`, one job each: `index.html` (structure), `style.css` (look), and `js/` modules (`api` is the only one that talks to the server; `add`, `progress`, `library`, `search` and `results` each own one part of the page; `state` and `poller` are shared plumbing). Nothing polls while idle.
 
-The same flow over the API:
+## The API
+
+The same flow over HTTP:
 
 ```sh
 curl -XPOST localhost:8081/batches -d '{"name":"docs","urls":["http://fakesite:9000/p/1"],"max_depth":0}'
 curl -XPOST localhost:8081/batches/1/files -F files=@handbook.pdf -F files=@notes.md
 curl localhost:8081/batches/1             # progress; "done": true when crawled, read and embedded
-curl 'localhost:8081/search/semantic?q=how+many+vacation+days&batch=1'   # omit batch to search everything
+curl 'localhost:8081/search/semantic?q=how+many+vacation+days&batch=1'          # omit batch to search everything
 curl 'localhost:8081/search/semantic?q=how+many+vacation+days&batch=1&page=2'   # next 10 results
 ```
 
-Other endpoints: `POST /crawls` and `GET /crawls/1` (a single crawl; `path_prefixes` limits it to URL paths such as `/docs/`, and `tessera -seed` takes `-path-prefixes` / `PATH_PREFIXES`), `GET /search?q=nebula` (keyword search over page titles and descriptions), `GET /metrics`.
+Other endpoints:
 
-Without Docker, run Postgres and Redis yourself:
+| endpoint | purpose |
+|---|---|
+| `POST /crawls`, `GET /crawls/1` | a single crawl; `path_prefixes` limits it to URL paths such as `/docs/` |
+| `GET /crawls/{id}/export` | the crawl's chunks as JSONL (`{id, url, title, heading, text, content_hash}`), if you would rather embed them yourself |
+| `GET /search?q=nebula` | keyword search over page titles and descriptions |
+| `GET /metrics`, `GET /healthz` | Prometheus metrics, health check |
+
+## Run without Docker
+
+Run Postgres (with pgvector) and Redis yourself:
 
 ```sh
 export DATABASE_URL=postgres://... REDIS_URL=redis://...
@@ -41,7 +57,9 @@ go run ./cmd/fakesite -pages 500 &
 go run ./cmd/tessera -seed http://127.0.0.1:9000/ -max-depth 6 -exit-when-done
 ```
 
-To **resume** after a crash, restart `tessera` *without* `-seed`: it works whatever is pending. (`-seed` starts a new crawl.)
+To **resume** after a crash, restart `tessera` *without* `-seed`: it works whatever is pending. (`-seed` starts a new crawl; it also takes `-path-prefixes` / `PATH_PREFIXES`.)
+
+Config is flags with env fallbacks: see `go run ./cmd/tessera -h`.
 
 ## How it works
 
@@ -56,20 +74,11 @@ To **resume** after a crash, restart `tessera` *without* `-seed`: it works whate
 | `internal/batch`, `internal/ingest` | batches of documents; text extraction from PDF, Markdown, HTML and text uploads into the same chunks the crawler produces |
 | `internal/embed` | background embedding of chunks through Ollama; crawling never waits on it, and chunks without a vector just stay pending until the model is reachable |
 
-Config is flags with env fallbacks: see `go run ./cmd/tessera -h`.
-
-## Tests
-
-```sh
-go test -short ./...                      # no services needed
-make test                                 # all tests, -race, needs TEST_DATABASE_URL and TEST_REDIS_URL
-```
-
-The suite includes the original deadlock regression (`internal/crawler/deadlock_test.go`) and end-to-end `kill -9` / SIGTERM / two-process tests (`internal/e2e`). Benchmark: `make bench`, results and caveats in [docs/BENCHMARK.md](docs/BENCHMARK.md). Concept notes: [docs/CONCEPTS.md](docs/CONCEPTS.md).
+`FEATURES.md` is the living ledger of subsystems, with entry points, data dependencies and trade-offs. Concept notes: [docs/CONCEPTS.md](docs/CONCEPTS.md).
 
 ## Semantic search and embeddings
 
-Chunks (heading-aware pieces of at most 1500 characters, taken from `<main>`, else `<article>`, else `<body>`, without nav, header, footer, aside or forms) are embedded with `nomic-embed-text` (768 dimensions) through a local [Ollama](https://ollama.com) and stored in Postgres with [pgvector](https://github.com/pgvector/pgvector). Search embeds your question the same way and returns the closest passages, with their heading and source. Re-crawling or re-uploading an unchanged document keeps its vectors; a changed one is re-embedded.
+Chunks (heading-aware pieces of at most 1500 characters, taken from `<main>`, else `<article>`, else `<body>`, without nav, header, footer, aside or forms) are embedded with `nomic-embed-text` (768 dimensions) through a local Ollama and stored in Postgres with pgvector. Search embeds your question the same way and returns the closest passages, with their heading and source. Re-crawling or re-uploading an unchanged document keeps its vectors; a changed one is re-embedded.
 
 | setting | meaning |
 |---|---|
@@ -78,8 +87,27 @@ Chunks (heading-aware pieces of at most 1500 characters, taken from `<main>`, el
 
 **Postgres must have pgvector.** Migration 00003 runs `CREATE EXTENSION vector`, which needs a role allowed to do that. `make up` uses the `pgvector/pgvector` image. If you bring your own database (including the one behind `TEST_DATABASE_URL`), use a pgvector 0.8+ build.
 
-Uploads: PDF, Markdown, HTML or text, up to 25 MB per file, 50 files per request, 200 MB per request. Only the extracted text is stored, not the file. A scanned PDF has no text layer and is reported as unreadable (no OCR). Page URLs must be HTML pages; to ingest a PDF, upload it.
+**Uploads:** PDF, Markdown, HTML or text, up to 25 MB per file, 50 files per request, 200 MB per request. Only the extracted text is stored, not the file. A scanned PDF has no text layer and is reported as unreadable (no OCR). Page URLs must be HTML pages; to ingest a PDF, upload it.
 
-Search results come in pages: `page` (from 1) and `limit` (page size, default 10, at most 50). The response has `page`, `page_size` and `has_more`. A search returns at most 100 results in total, so `page` past that is a 400. In the dashboard, results show the matched text in a quote block with its source below it: a link for crawled pages, a plain file name for uploads.
+**Results** come in pages: `page` (from 1) and `limit` (page size, default 10, at most 50). The response has `page`, `page_size` and `has_more`. A search returns at most 100 results in total, so `page` past that is a 400. In the dashboard, results show the matched text in a quote block with its source below it: a link for crawled pages, a plain file name for uploads.
 
-Each batch is searched on its own: the same URL may belong to several batches. `GET /crawls/{id}/export` still streams one crawl's chunks as JSONL (`{id, url, title, heading, text, content_hash}`) if you would rather embed them yourself.
+Each batch is searched on its own: the same URL may belong to several batches.
+
+## Tests
+
+```sh
+go test -short ./...                      # no services needed
+make test                                 # all tests, -race, needs TEST_DATABASE_URL and TEST_REDIS_URL (`make up` first)
+```
+
+The suite includes the original deadlock regression (`internal/crawler/deadlock_test.go`) and end-to-end `kill -9` / SIGTERM / two-process tests (`internal/e2e`). Benchmark: `make bench`, results and caveats in [docs/BENCHMARK.md](docs/BENCHMARK.md).
+
+## Upgrading from CrawlerX
+
+The project was renamed to Tessera. Things that changed:
+
+- **Metrics**: `crawlerx_*` became `tessera_*`. Update Prometheus dashboards and alerts.
+- **Redis keys**: the `crawlerx:` prefix became `tessera:`. Old keys are orphaned and harmless.
+- **User-Agent and robots token**: now `Tessera`, so robots.txt rules written for CrawlerX no longer match.
+- **Compose database**: user, password and database are now `tessera`. Run `make down` then `make up` to recreate it.
+- **Go module and binary**: `github.com/wanderingtilldeath/tessera`, built from `./cmd/tessera`.
